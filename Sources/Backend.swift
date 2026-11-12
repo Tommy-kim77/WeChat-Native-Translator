@@ -62,15 +62,44 @@ struct GroupRoom: Decodable, Identifiable, Equatable {
     }
 }
 struct Message: Decodable, Identifiable, Equatable {
+    struct Recall: Decodable, Equatable { let replacementText: String? }
+    struct Quote: Decodable, Equatable {
+        let senderName: String?
+        let embeddedText: String?
+        let state: String?
+    }
+
     let id: String
     let type: Int
     let direction: String?
     let body: String?
     let appMessageType: Int?
+    let senderId: String?
+    let threadId: String?
+    let serverId: String?
+    let createdAt: String?
+    let recall: Recall?
+    let quote: Quote?
     var outgoing: Bool { direction == "outgoing" }
-    var hasTranslatableText: Bool { type == 1 || (type == 49 && appMessageType == 57) }
+    var hasSender: Bool { type < 10000 && (direction == "incoming" || senderId != nil) }
+    var isRecalled: Bool { recall != nil }
+    var confirmedServerID: String? {
+        guard let serverId, let value = UInt64(serverId), value > 0, String(value) == serverId else { return nil }
+        return serverId
+    }
+    var hasTranslatableText: Bool { !isRecalled && (type == 1 || (type == 49 && appMessageType == 57)) }
+    var quoteReference: TextSendRequest.Quote? {
+        let supported = switch type {
+        case 1, 3, 34, 42, 43, 47, 48: true
+        case 49: appMessageType.map { [1, 3, 4, 5, 6, 8, 19, 51, 57, 87].contains($0) } ?? false
+        default: false
+        }
+        guard !isRecalled, supported, let confirmedServerID else { return nil }
+        return .init(messageId: id, serverId: confirmedServerID)
+    }
     var attachmentLabelKey: String? {
-        switch type {
+        guard !isRecalled else { return nil }
+        return switch type {
         case 3: "사진"
         case 34: "음성 메시지"
         case 43, 62: "동영상"
@@ -89,6 +118,10 @@ struct Operation: Decodable {
         let action: String?
         let targetId: String?
         let memberOutcome: String?
+        let messageId: String?
+        let threadId: String?
+        let serverId: String?
+        let status: String?
     }
     let id: String
     let state: String
@@ -309,6 +342,17 @@ final class Backend {
 
     func messages(_ account: String, _ room: String) async throws -> [Message] {
         try await decode(Page<Message>.self, "/accounts/\(part(account))/threads/\(part(room))/messages?limit=80").items.reversed()
+    }
+
+    func searchMessages(_ account: String, room: String, query: String, cursor: String?) async throws -> Page<Message> {
+        let suffix = cursor.map { "&cursor=" + part($0) } ?? ""
+        return try await decode(Page<Message>.self,
+                                "/accounts/\(part(account))/threads/\(part(room))/messages?limit=40&search=\(part(query))" + suffix)
+    }
+
+    func recall(_ account: String, message: String, serverID: String, key: String) async throws -> Operation {
+        try await decode(Operation.self, "/accounts/\(part(account))/messages/\(part(message))/recall",
+                         method: "POST", body: ["serverId": serverID], key: key)
     }
 
     func thread(_ account: String, _ room: String) async throws -> Room {

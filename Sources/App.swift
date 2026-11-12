@@ -12,8 +12,9 @@ enum RoomFilter: String, CaseIterable, Identifiable {
 private struct AutomaticTranslation: Hashable {
     let messageID: String
     let text: String
-    let source: String
+    let source: String?
     let target: String
+    let mixed: MixedLanguageText?
 }
 
 struct PendingAttachment {
@@ -57,6 +58,18 @@ final class ChatModel: ObservableObject {
     @Published var automaticConfig: TranslationSession.Configuration?
     @Published var selection: String?
     @Published var messages: [Message] = []
+    @Published private var hiddenMessageIDs: [String: [String]]
+    @Published private var confirmedRecalls: Set<String> = []
+    @Published private(set) var pendingRecalls: Set<String> = []
+    @Published private var quotedMessages: [String: Message] = [:]
+    @Published private(set) var lastHiddenMessage: String?
+    private var recallKeys: [String: String] = [:]
+    var quotedMessage: Message? { selection.flatMap { quotedMessages[$0] } }
+    var visibleMessages: [Message] {
+        guard let account, let ids = hiddenMessageIDs[account.id], !ids.isEmpty else { return messages }
+        let hidden = Set(ids)
+        return messages.filter { !hidden.contains($0.id) }
+    }
     @Published private(set) var loadingMessages = false
     @Published private(set) var acknowledgedVersions: [String: String] = [:]
     @Published private(set) var composerDraft = MessageDraft() { didSet { if composerDraft != oldValue { previewDraft = nil } } }
@@ -95,11 +108,13 @@ final class ChatModel: ObservableObject {
     @Published private(set) var checkingDeepLKey = false
     @Published private(set) var deepLSettingsStatus: UIMessage?
     private let deepL = DeepLClient()
+    let mixedAutomaticApple = AppleTranslationRoute()
+    let mixedManualApple = AppleTranslationRoute()
     private var deepLKey: String?
     private var loadedDeepLKey = false
     private var deepLAutoRetryAfter = Date.distantPast
-    private var automaticDeepLTask: Task<Void, Never>?
-    private var manualDeepLTask: Task<Void, Never>?
+    private var automaticTask: Task<Void, Never>?
+    private var manualTask: Task<Void, Never>?
     private(set) var translationGeneration = 0
     private var work: (id: UUID, draft: MessageDraft, message: String?, room: String, language: Language)?
     private var previewSource: (draft: MessageDraft, room: String, language: Language)?
@@ -130,10 +145,11 @@ final class ChatModel: ObservableObject {
     private var translationCache: [AutomaticTranslation: String] = [:]
     private var translationRetries: [AutomaticTranslation: Date] = [:]
     private var nextTranslationRetry = Date.distantFuture
-    private var activeAutomaticRoute: (source: String, target: String)?
+    private var activeAutomaticRoute: (source: String?, target: String)?
 
     init(preferences: UserDefaults = .standard, preferredLanguages: [String] = Locale.preferredLanguages) {
         self.preferences = preferences
+        self.hiddenMessageIDs = preferences.object(forKey: "hiddenMessageIDs") as? [String: [String]] ?? [:]
         let system = Language.preferred(from: preferredLanguages)
         self.systemLanguage = system
         self.interfacePreference = preferences.string(forKey: "interfaceLanguage").flatMap(Language.init(rawValue:))
@@ -203,10 +219,10 @@ final class ChatModel: ObservableObject {
 
     private func resetTranslationEngine() {
         translationGeneration += 1
-        automaticDeepLTask?.cancel()
-        manualDeepLTask?.cancel()
-        automaticDeepLTask = nil
-        manualDeepLTask = nil
+        automaticTask?.cancel()
+        manualTask?.cancel()
+        automaticTask = nil
+        manualTask = nil
         activeAutomaticRoute = nil
         inFlightTranslation = nil
         work = nil
@@ -351,6 +367,7 @@ final class ChatModel: ObservableObject {
     }
 
     private func rememberMessages(_ latest: [Message], in room: String) {
+        for message in latest where message.isRecalled { confirmedRecalls.insert(message.id) }
         messageCache[room] = latest
         cacheOrder.removeAll { $0 == room }
         cacheOrder.append(room)
@@ -540,9 +557,22 @@ final class ChatModel: ObservableObject {
     }
 
     func showGroupMemberAvatar(_ member: GroupMember, in room: String) {
+        showGroupSenderAvatar(member.id, in: room)
+    }
+
+    func showGroupSenderAvatar(_ id: String, in room: String) {
         guard selection == room else { return }
-        enqueueAvatar(.person(member.id, group: room))
+        enqueueAvatar(.person(id, group: room))
         startAvatarRequests()
+    }
+
+    func groupSenderName(_ id: String?, in room: String) -> String {
+        guard let id else { return interfaceLanguage.label("이름 미확인 멤버") }
+        let member = groupRosters[room]?.first { $0.id == id }
+        return [displayNames[id], wechatContactNames[id], member?.displayName, member?.roomDisplayName,
+                member?.mentionName, contacts.first(where: { $0.id == id })?.name]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty && $0 != id } ?? interfaceLanguage.label("이름 미확인 멤버")
     }
 
     private func avatarRoomIsVisible(_ room: String) -> Bool { selection == room || visibleAvatarRooms.contains(room) }
@@ -646,9 +676,12 @@ final class ChatModel: ObservableObject {
         var ready: [AutomaticTranslation] = []
         nextTranslationRetry = .distantFuture
         let now = Date()
-        for message in messages.reversed() where message.hasTranslatableText {
-            guard let text = message.body, let source = Self.automaticSource(text) else { continue }
-            let job = AutomaticTranslation(messageID: message.id, text: text, source: source, target: received.rawValue)
+        for message in visibleMessages.reversed() where message.hasTranslatableText && !isRecalled(message) {
+            guard let text = message.body else { continue }
+            let mixed = MixedLanguageText(text)
+            let source = mixed == nil ? Self.automaticSource(text) : nil
+            guard source != nil || mixed != nil else { continue }
+            let job = AutomaticTranslation(messageID: message.id, text: text, source: source, target: received.rawValue, mixed: mixed)
             guard job.source != job.target, job != inFlightTranslation else { continue }
             if let cached = translationCache[job] {
                 if !cached.isEmpty, translations[job.messageID] != cached { translations[job.messageID] = cached }
@@ -666,7 +699,7 @@ final class ChatModel: ObservableObject {
     }
 
     func runAutomaticTranslation(_ session: TranslationSession, generation: Int) async {
-        guard translationProvider == .apple, generation == translationGeneration else { return }
+        guard translationProvider == .apple, generation == translationGeneration, activeAutomaticRoute?.source != nil else { return }
         await runAutomaticTranslations(generation: generation) { job in
             try await session.translate(job.text).targetText
         }
@@ -678,7 +711,7 @@ final class ChatModel: ObservableObject {
             if generation == translationGeneration {
                 inFlightTranslation = nil
                 activeAutomaticRoute = nil
-                automaticDeepLTask = nil
+                automaticTask = nil
                 startAutomaticTranslation()
             }
         }
@@ -717,27 +750,44 @@ final class ChatModel: ObservableObject {
     }
 
     private func startAutomaticTranslation() {
-        guard activeAutomaticRoute == nil, let job = queuedTranslations.first else { return }
+        guard activeAutomaticRoute == nil, let job = queuedTranslations.first, let target = Language(rawValue: job.target) else { return }
         if translationProvider == .deepL {
             guard let key = deepLKey else {
                 status = DeepLError.missingKey.displayMessage
                 return
             }
-            guard Date() >= deepLAutoRetryAfter, let target = Language(rawValue: job.target) else { return }
+            guard Date() >= deepLAutoRetryAfter else { return }
             activeAutomaticRoute = (job.source, job.target)
             let generation = translationGeneration
-            automaticDeepLTask = Task {
+            automaticTask = Task {
                 await runAutomaticTranslations(generation: generation) { job in
-                    try await self.deepL.translate(job.text, source: job.source, target: target, key: key)
+                    if let mixed = job.mixed {
+                        return try await mixed.translated(to: target) { text, source in
+                            try await self.deepL.translate(text, source: source.rawValue, target: target, key: key)
+                        }
+                    }
+                    return try await self.deepL.translate(job.text, source: job.source, target: target, key: key)
                 }
             }
             return
         }
         activeAutomaticRoute = (job.source, job.target)
-        let source = Locale.Language(identifier: job.source)
-        let target = Locale.Language(identifier: job.target)
-        if automaticConfig?.source == source, automaticConfig?.target == target { automaticConfig?.invalidate() }
-        else { automaticConfig = .init(source: source, target: target) }
+        guard let code = job.source else {
+            let generation = translationGeneration
+            automaticTask = Task {
+                await runAutomaticTranslations(generation: generation) { job in
+                    guard let mixed = job.mixed else { throw ConnectionError.invalidResponse }
+                    return try await mixed.translated(to: target) { text, source in
+                        try await self.mixedAutomaticApple.translate(text, from: source, to: target)
+                    }
+                }
+            }
+            return
+        }
+        let source = Locale.Language(identifier: code)
+        let destination = Locale.Language(identifier: target.rawValue)
+        if automaticConfig?.source == source, automaticConfig?.target == destination { automaticConfig?.invalidate() }
+        else { automaticConfig = .init(source: source, target: destination) }
     }
 
     private static func isLatinName(_ title: String) -> Bool {
@@ -799,19 +849,34 @@ final class ChatModel: ObservableObject {
         let content = message == nil && draft == text ? composerDraft : MessageDraft(text)
         let id = UUID()
         work = (id, content, message, selection, target)
-        let code = NLLanguageRecognizer.dominantLanguage(for: content.prose)?.rawValue
-        if content.prose.isEmpty || code?.split(separator: "-").first == target.rawValue.split(separator: "-").first {
+        let prose = content.prose
+        let mixed = MixedLanguageText(prose) != nil
+        let code = NLLanguageRecognizer.dominantLanguage(for: prose)?.rawValue
+        if prose.isEmpty || (!mixed && code?.split(separator: "-").first == target.rawValue.split(separator: "-").first) {
             accept(content)
             return
         }
         translating = true
-        if translationProvider == .deepL {
-            guard let key = deepLKey else { failTranslation(DeepLError.missingKey, id: id); return }
-            manualDeepLTask = Task {
-                defer { if work?.id == id || work == nil { manualDeepLTask = nil } }
+        if translationProvider == .deepL || mixed {
+            let key = translationProvider == .deepL ? deepLKey : nil
+            if translationProvider == .deepL && key == nil { failTranslation(DeepLError.missingKey, id: id); return }
+            manualTask = Task {
+                defer { if work?.id == id || work == nil { manualTask = nil } }
                 do {
                     let translated = try await content.translated { segment in
-                        try await deepL.translate(segment, source: code, target: target, key: key)
+                        if mixed, let plan = MixedLanguageText(segment) {
+                            return try await plan.translated(to: target) { text, source in
+                                if let key { return try await self.deepL.translate(text, source: source.rawValue, target: target, key: key) }
+                                return try await self.mixedManualApple.translate(text, from: source, to: target)
+                            }
+                        }
+                        if mixed, let sourceCode = Self.automaticSource(segment), let source = Language(rawValue: sourceCode) {
+                            if source == target { return segment }
+                            if let key { return try await deepL.translate(segment, source: sourceCode, target: target, key: key) }
+                            return try await mixedManualApple.translate(segment, from: source, to: target)
+                        }
+                        if let key { return try await deepL.translate(segment, source: code, target: target, key: key) }
+                        return segment
                     }
                     guard work?.id == id, !Task.isCancelled else { return }
                     accept(translated)
@@ -826,7 +891,7 @@ final class ChatModel: ObservableObject {
     }
 
     func runTranslation(_ session: TranslationSession, generation: Int) async {
-        guard translationProvider == .apple, generation == translationGeneration, let work else { return }
+        guard translationProvider == .apple, generation == translationGeneration, manualTask == nil, let work else { return }
         do {
             let translated = try await work.draft.translated { segment in
                 try await session.translate(segment).targetText
@@ -869,7 +934,12 @@ final class ChatModel: ObservableObject {
     func send() async {
         guard let account, let selection, !sending, !translating else { return }
         let source = composerDraft
-        guard let request = (confirmedPreview ?? source).request(for: selection) else { return }
+        let quote = quotedMessage
+        if let quote, isRecalled(quote) {
+            status = UIMessage("회수된 메시지입니다. 인용을 취소한 뒤 전송하세요.")
+            return
+        }
+        guard let request = (confirmedPreview ?? source).request(for: selection, quote: quote?.quoteReference) else { return }
         sending = true
         defer { sending = false }
         let key = sendKeys[selection].flatMap { $0.request == request ? $0.key : nil } ?? UUID().uuidString
@@ -884,6 +954,7 @@ final class ChatModel: ObservableObject {
             switch sent.state {
             case "accepted":
                 if composerDraft == source { composerDraft = MessageDraft() }
+                if quotedMessages[selection] == quote { quotedMessages[selection] = nil }
                 sendKeys[selection] = nil
                 status = UIMessage("위챗에서 전송을 수락했습니다.")
             case "failed", "cancelled":
@@ -892,6 +963,79 @@ final class ChatModel: ObservableObject {
             default: status = UIMessage("전송 확인 대기 중 · 같은 문장을 다시 누르면 기존 요청의 결과를 확인합니다.")
             }
         } catch { status = UIMessage(error: error, prefix: "전송 결과 미확인 · %@") }
+    }
+
+    func setQuote(_ message: Message?, in room: String) {
+        guard !sending, selection == room else { return }
+        if let message, isRecalled(message) || message.quoteReference == nil { return }
+        quotedMessages[room] = message
+    }
+
+    func isRecalled(_ message: Message) -> Bool {
+        message.isRecalled || confirmedRecalls.contains(message.id)
+    }
+
+    func searchMessages(in room: String, query: String, cursor: String?) async throws -> Page<Message> {
+        guard let account, selection == room else { throw CancellationError() }
+        let page = try await backend.searchMessages(account.id, room: room, query: query, cursor: cursor)
+        try Task.checkCancellation()
+        guard selection == room else { throw CancellationError() }
+        let hidden = Set(hiddenMessageIDs[account.id] ?? [])
+        return Page(items: page.items.filter { !hidden.contains($0.id) && !isRecalled($0) }, nextCursor: page.nextCursor)
+    }
+
+    func canRecall(_ message: Message) -> Bool {
+        message.outgoing && message.type > 0 && message.type < 10000
+            && message.threadId == selection && message.confirmedServerID != nil && !isRecalled(message)
+    }
+
+    func recall(_ message: Message, in room: String) async {
+        guard let account, room == selection, message.threadId == room, canRecall(message),
+              let serverID = message.confirmedServerID, pendingRecalls.insert(message.id).inserted else { return }
+        let key = recallKeys[message.id] ?? UUID().uuidString
+        recallKeys[message.id] = key
+        status = UIMessage("위챗에 메시지 회수를 요청하는 중…")
+        defer { pendingRecalls.remove(message.id) }
+        do {
+            var operation = try await backend.recall(account.id, message: message.id, serverID: serverID, key: key)
+            for _ in 0..<20 where ["queued", "running"].contains(operation.state) {
+                try await Task.sleep(for: .milliseconds(750))
+                operation = try await backend.operation(account.id, operation.id)
+            }
+            guard operation.result?.messageId == message.id, operation.result?.threadId == room,
+                  operation.result?.serverId == serverID else { throw ConnectionError.invalidResponse }
+            switch operation.state {
+            case "succeeded":
+                confirmedRecalls.insert(message.id)
+                translations[message.id] = nil
+                if selection == room { queueMessages() }
+                status = UIMessage("메시지를 회수했습니다.")
+            case "failed", "cancelled":
+                status = operation.result?.status == "not_eligible"
+                    ? UIMessage("위챗에서 이 메시지의 회수를 허용하지 않았습니다.")
+                    : UIMessage("메시지 회수 실패 · %@", operation.result?.status ?? operation.state)
+            default:
+                status = UIMessage("회수 결과를 아직 확인하지 못했습니다. 다시 선택하면 같은 요청을 확인합니다.")
+            }
+        } catch { status = UIMessage(error: error, prefix: "회수 결과 미확인 · %@") }
+    }
+
+    func hideMessage(_ message: Message) {
+        guard let account, !hiddenMessageIDs[account.id, default: []].contains(message.id) else { return }
+        hiddenMessageIDs[account.id, default: []].append(message.id)
+        preferences.set(hiddenMessageIDs, forKey: "hiddenMessageIDs")
+        lastHiddenMessage = message.id
+        status = UIMessage("이 앱에서 메시지를 숨겼습니다.")
+        queueMessages()
+    }
+
+    func undoHideMessage() {
+        guard let account, let lastHiddenMessage else { return }
+        hiddenMessageIDs[account.id]?.removeAll { $0 == lastHiddenMessage }
+        preferences.set(hiddenMessageIDs, forKey: "hiddenMessageIDs")
+        self.lastHiddenMessage = nil
+        status = UIMessage("숨긴 메시지를 복원했습니다.")
+        queueMessages()
     }
 
     func chooseFile() {
@@ -980,6 +1124,9 @@ struct ChatView: View {
     @State private var showingLanguageSettings = false
     @State private var deepLKeyInput = ""
     @State private var showingChatInfo = false
+    @State private var messageToRecall: Message?
+    @State private var confirmingRecall = false
+    @State private var showingHistorySearch = false
     @State private var editorSelection: NSRange?
     @State private var composerPlacement: ComposerPlacement?
     @State private var dismissedMention: MentionQuery?
@@ -1006,12 +1153,20 @@ struct ChatView: View {
         .translationTask(model.automaticConfig) { [generation = model.translationGeneration] session in
             await model.runAutomaticTranslation(session, generation: generation)
         }
+        .background(AppleTranslationRouteView(route: model.mixedAutomaticApple))
+        .background(AppleTranslationRouteView(route: model.mixedManualApple))
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in model.backend.stop() }
         .alert(language.label("이 앱의 표시 이름"), isPresented: $showingNameEditor, presenting: roomToRename) { room in
             TextField(language.label("표시 이름"), text: $editingName)
             Button(language.label("저장")) { model.setDisplayName(editingName, for: room) }
             if model.displayNames[room.id] != nil {
                 Button(language.label("위챗에서 받은 이름 사용")) { model.setDisplayName("", for: room) }
+            }
+            Button(language.label("취소"), role: .cancel) { }
+        }
+        .alert(language.label("메시지를 회수하시겠습니까?"), isPresented: $confirmingRecall, presenting: messageToRecall) { message in
+            Button(language.label("회수"), role: .destructive) {
+                if let room = message.threadId { Task { await model.recall(message, in: room) } }
             }
             Button(language.label("취소"), role: .cancel) { }
         }
@@ -1073,6 +1228,14 @@ struct ChatView: View {
                     Spacer()
                     picker("번역 언어", $model.received)
                     languageSettings
+                    if let room = model.selection {
+                        Button(language.label("대화 기록 검색"), systemImage: "magnifyingglass") { showingHistorySearch.toggle() }
+                            .labelStyle(.iconOnly)
+                            .help(language.label("대화 기록 검색"))
+                            .popover(isPresented: $showingHistorySearch, arrowEdge: .bottom) {
+                                ChatHistorySearch(model: model, room: room).id(room)
+                            }
+                    }
                     if let room = selected, !["filehelper", "brandsessionholder"].contains(room.id) { chatInfo(room) }
                 }
                 Divider()
@@ -1080,14 +1243,25 @@ struct ChatView: View {
                     ScrollView {
                         LazyVStack(spacing: 10) {
                             if model.loadingMessages { ProgressView(language.label("대화 불러오는 중…")).padding(.top, 28) }
-                            else if model.messages.isEmpty, model.selection != nil { Text(language.label("이 기기에 동기화된 메시지가 없습니다.")).foregroundStyle(.secondary).padding(.top, 28) }
-                            ForEach(model.messages) { message in bubble(message) }
+                            else if model.visibleMessages.isEmpty, model.selection != nil { Text(language.label("표시할 메시지가 없습니다.")).foregroundStyle(.secondary).padding(.top, 28) }
+                            if let room = model.selection {
+                                ForEach(model.visibleMessages) { message in bubble(message, in: room) }
+                            }
                             Color.clear.frame(height: 1).id("latest")
                         }
                     }.onChange(of: model.messages.last?.id) { _, _ in scroller.scrollTo("latest", anchor: .bottom) }
                 }
                 if let room = model.selection {
                     Divider()
+                    if let message = model.quotedMessage {
+                        HStack {
+                            Label(quotePreview(message, in: room), systemImage: "quote.bubble")
+                                .lineLimit(1).foregroundStyle(.secondary)
+                            Spacer()
+                            Button(language.label("인용 취소"), systemImage: "xmark") { model.setQuote(nil, in: room) }
+                                .labelStyle(.iconOnly).disabled(model.sending)
+                        }.font(.caption)
+                    }
                     if let query = mentionQuery { mentionPicker(room: room, query: query) }
                     MessageComposer(text: model.draft, label: language.label("위챗 초안"), placement: composerPlacement,
                                     onEdit: { text, edit, caret in
@@ -1139,13 +1313,18 @@ struct ChatView: View {
                             .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.sending || model.translating)
                     }
                 }
-                Text(model.status.text(in: language)).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+                HStack {
+                    Text(model.status.text(in: language)).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+                    if model.lastHiddenMessage != nil {
+                        Button(language.label("최근 숨김 취소")) { model.undoHideMessage() }.buttonStyle(.link)
+                    }
+                }
             }.padding(18).frame(minWidth: 515)
                 .task(id: model.selection) {
                     if let room = model.selection { await model.watchMessages(in: room) }
                 }
-                .task(id: mentionQuery == nil ? nil : model.selection) {
-                    if mentionQuery != nil, let room = model.selection { await model.loadGroupRoster(room) }
+                .task(id: model.selection) {
+                    if let room = model.selection, room.hasSuffix("@chatroom") { await model.loadGroupRoster(room) }
                 }
                 .onChange(of: mentionQuery) { _, _ in mentionIndex = 0 }
                 .onChange(of: model.selection) { _, _ in
@@ -1153,6 +1332,7 @@ struct ChatView: View {
                     composerPlacement = nil
                     dismissedMention = nil
                     showingChatInfo = false
+                    showingHistorySearch = false
                 }
         }
     }
@@ -1333,23 +1513,100 @@ struct ChatView: View {
         }
     }
 
-    private func bubble(_ message: Message) -> some View {
-        HStack {
+    private func bubble(_ message: Message, in room: String) -> some View {
+        let recalled = model.isRecalled(message)
+        let showSender = room.hasSuffix("@chatroom") && !message.outgoing && message.hasSender && !recalled
+        return HStack(alignment: .top, spacing: 8) {
             if message.outgoing { Spacer(minLength: 65) }
+            if showSender { groupSenderAvatar(message.senderId, in: room) }
+            VStack(alignment: .leading, spacing: 4) {
+                if showSender {
+                    Text(model.groupSenderName(message.senderId, in: room))
+                        .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+                messageContent(message, recalled: recalled)
+            }
+            .contextMenu {
+                messageActions(message, in: room)
+            }
+            Menu {
+                messageActions(message, in: room)
+            } label: {
+                Label(language.label("메시지 메뉴"), systemImage: "ellipsis").labelStyle(.iconOnly)
+                    .foregroundStyle(.secondary)
+            }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .help(language.label("메시지 메뉴"))
+            .padding(.top, showSender ? 21 : 4)
+            if !message.outgoing { Spacer(minLength: 65) }
+        }
+    }
+
+    @ViewBuilder
+    private func messageActions(_ message: Message, in room: String) -> some View {
+        if !model.isRecalled(message), let text = message.body, !text.isEmpty {
+            Button(language.label("복사"), systemImage: "document.on.document") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+            }
+        }
+        if !model.isRecalled(message), message.quoteReference != nil {
+            Button(language.label("인용 답장"), systemImage: "quote.bubble") { model.setQuote(message, in: room) }
+        }
+        if model.canRecall(message) {
+            Button(language.label("회수"), systemImage: "arrow.uturn.backward") {
+                messageToRecall = message
+                confirmingRecall = true
+            }.disabled(model.pendingRecalls.contains(message.id))
+        }
+        Button(language.label("이 앱에서 숨기기"), systemImage: "eye.slash") { model.hideMessage(message) }
+    }
+
+    private func groupSenderAvatar(_ id: String?, in room: String) -> some View {
+        ZStack {
+            Color.secondary.opacity(0.13)
+            if let id, let image = model.avatarImages[id] {
+                Image(nsImage: image).resizable().scaledToFill()
+            } else {
+                Image(systemName: "person.fill").font(.system(size: 15)).foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 34, height: 34)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .accessibilityHidden(true)
+        .onAppear { if let id { model.showGroupSenderAvatar(id, in: room) } }
+    }
+
+    private func quotePreview(_ message: Message, in room: String) -> String {
+        if model.isRecalled(message) { return language.label("회수된 메시지") }
+        let body = message.body ?? message.attachmentLabelKey.map { language.label($0) } ?? language.label("인용한 메시지")
+        let author = message.outgoing ? language.label("나")
+            : room.hasSuffix("@chatroom") ? model.groupSenderName(message.senderId, in: room) : nil
+        return author.map { "\($0) · \(body)" } ?? body
+    }
+
+    private func messageContent(_ message: Message, recalled: Bool) -> some View {
             VStack(alignment: .leading, spacing: 6) {
-                if let attachment = message.attachmentLabelKey {
+                if recalled {
+                    Text(language.label("회수된 메시지")).foregroundStyle(.secondary)
+                } else if let attachment = message.attachmentLabelKey {
                     Label(message.body ?? language.label(attachment), systemImage: "doc").textSelection(.enabled)
                     Button(language.label(model.downloading.contains(message.id) ? "가져오는 중…" : "첨부파일 저장…"), systemImage: "arrow.down.to.line") {
                         Task { await model.saveAttachment(message) }
                     }.buttonStyle(.link).disabled(model.downloading.contains(message.id))
                 } else { Text(message.body ?? language.label("[첨부 또는 시스템 메시지]")).textSelection(.enabled) }
-                if let translated = model.translations[message.id] { Divider(); Text(translated).textSelection(.enabled) }
-                if message.hasTranslatableText, let body = message.body, model.translations[message.id] == nil {
+                if !recalled, let translated = model.translations[message.id] { Divider(); Text(translated).textSelection(.enabled) }
+                if !recalled, message.hasTranslatableText, let body = message.body, model.translations[message.id] == nil {
                     Button(language.label("번역")) { model.translate(body, message: message.id) }.buttonStyle(.link).disabled(model.translating)
                 }
+                if !recalled, let quote = message.quote {
+                    let text = quote.state == "recalled" ? language.label("회수된 메시지")
+                        : quote.embeddedText ?? language.label("인용한 메시지")
+                    Divider()
+                    Label(quote.senderName.map { "\($0) · \(text)" } ?? text, systemImage: "quote.bubble")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                }
             }.padding(10).background(message.outgoing ? Color.green.opacity(0.2) : Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
-            if !message.outgoing { Spacer(minLength: 65) }
-        }
     }
 
     private func picker(_ label: String, _ selection: Binding<Language>) -> some View {

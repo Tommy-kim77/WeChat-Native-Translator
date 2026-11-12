@@ -17,3 +17,7 @@ profile/
 *.sqlite-*
 *.sqlite3
 *.sqlite3-*
+
+/Archive/
+/Dependencies/
+/Releases/

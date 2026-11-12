@@ -20,6 +20,8 @@ struct GroupMember: Decodable, Equatable, Identifiable {
 }
 
 struct TextSendRequest: Encodable, Equatable {
+    struct Quote: Encodable, Equatable { let messageId: String; let serverId: String }
+
     struct Mentions: Encodable, Equatable {
         struct Position: Encodable, Equatable { let start: Int; let end: Int; let index: Int }
         let userIds: [String]
@@ -29,6 +31,7 @@ struct TextSendRequest: Encodable, Equatable {
     let threadId: String
     let text: String
     let mentions: Mentions?
+    let quote: Quote?
 }
 
 struct DraftEdit {
@@ -124,7 +127,7 @@ struct MessageDraft: Equatable {
         return String(text[..<range.lowerBound]) + translated + String(text[range.upperBound...])
     }
 
-    func request(for room: String) -> TextSendRequest? {
+    func request(for room: String, quote: TextSendRequest.Quote? = nil) -> TextSendRequest? {
         var trim = CharacterSet.whitespacesAndNewlines
         if !mentions.isEmpty { trim.remove(charactersIn: "\u{2005}") }
         guard let first = text.rangeOfCharacter(from: trim.inverted),
@@ -139,6 +142,6 @@ struct MessageDraft: Equatable {
             positions.append(.init(start: mention.range.location - offset, end: NSMaxRange(mention.range) - offset, index: index))
         }
         return TextSendRequest(threadId: room, text: String(text[bounds]),
-                               mentions: users.isEmpty ? nil : .init(userIds: users, positions: positions))
+                               mentions: users.isEmpty ? nil : .init(userIds: users, positions: positions), quote: quote)
     }
 }
