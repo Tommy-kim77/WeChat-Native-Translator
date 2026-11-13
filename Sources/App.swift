@@ -101,6 +101,10 @@ final class ChatModel: ObservableObject {
     @Published var translations: [String: String] = [:]
     @Published private(set) var previewDraft: MessageDraft?
     var preview: String? { previewDraft?.text }
+    var canSend: Bool {
+        let text = (confirmedPreview ?? composerDraft).text
+        return !sending && !translating && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
     @Published var config: TranslationSession.Configuration?
     @Published var translating = false
     @Published private(set) var translationProvider: TranslationProvider
@@ -834,6 +838,12 @@ final class ChatModel: ObservableObject {
         if updated != composerDraft { composerDraft = updated }
     }
 
+    func updatePreview(_ text: String, edit: DraftEdit?, in room: String) {
+        guard !sending, selection == room, var updated = confirmedPreview else { return }
+        updated.update(text, edit: edit)
+        if updated != previewDraft { previewDraft = updated }
+    }
+
     func insertMention(_ member: GroupMember, at range: NSRange, in room: String) -> NSRange? {
         guard selection == room, room.hasSuffix("@chatroom"),
               groupRosters[room]?.contains(where: { $0.id == member.id }) == true else { return nil }
@@ -915,7 +925,7 @@ final class ChatModel: ObservableObject {
         else if work.message == nil, selection == work.room, composerDraft == work.draft, work.language == outgoing {
             previewDraft = translated
             previewSource = (work.draft, work.room, work.language)
-            status = UIMessage("번역 완료 · Enter를 누르면 번역문을 전송합니다.")
+            status = UIMessage("번역 완료 · 번역문을 수정한 뒤 Enter로 전송할 수 있습니다.")
         }
     }
 
@@ -926,13 +936,13 @@ final class ChatModel: ObservableObject {
     }
 
     func submitComposer() async {
-        guard !sending, !translating, !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard canSend else { return }
         if confirmedPreview != nil { await send() }
         else { translate(draft) }
     }
 
     func send() async {
-        guard let account, let selection, !sending, !translating else { return }
+        guard canSend, let account, let selection else { return }
         let source = composerDraft
         let quote = quotedMessage
         if let quote, isRecalled(quote) {
@@ -1281,7 +1291,8 @@ struct ChatView: View {
                     }.id(room).frame(height: 84)
                         .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.quaternary))
                     if let preview = model.preview {
-                        MessageComposer(text: preview, editable: false, label: language.label("번역문")) {
+                        MessageComposer(text: preview, editable: !model.sending, label: language.label("번역문"),
+                                        onEdit: { text, edit, _ in model.updatePreview(text, edit: edit, in: room) }) {
                             Task { await model.submitComposer() }
                         }.frame(height: 60)
                             .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.quaternary))
@@ -1310,7 +1321,7 @@ struct ChatView: View {
                         Text(language.label(model.preview == nil ? "Enter: 번역 · Shift+Enter: 줄바꿈" : "Enter: 번역문 전송"))
                             .font(.caption).foregroundStyle(.secondary)
                         Button(language.label("전송")) { Task { await model.send() } }.buttonStyle(.borderedProminent)
-                            .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.sending || model.translating)
+                            .disabled(!model.canSend)
                     }
                 }
                 HStack {
@@ -1617,5 +1628,10 @@ struct ChatView: View {
 @main
 struct NativeTranslatorApp: App {
     @StateObject private var model = ChatModel()
-    var body: some Scene { Window("WeChat Native Translator", id: "wechat-native-translator") { ChatView(model: model) }.defaultSize(width: 1100, height: 740) }
+    private let title = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "WeChat Native Translator"
+
+    var body: some Scene {
+        Window(title, id: "wechat-native-translator") { ChatView(model: model) }
+            .defaultSize(width: 1100, height: 740)
+    }
 }

@@ -38,6 +38,7 @@ struct MessageComposer: NSViewRepresentable {
         coordinator.composer = self
         guard let editor = scroll.documentView as? NSTextView else { return }
         editor.setAccessibilityLabel(label)
+        editor.isEditable = editable
         coordinator.updating = true
         defer { coordinator.updating = false }
         if editor.string != text {

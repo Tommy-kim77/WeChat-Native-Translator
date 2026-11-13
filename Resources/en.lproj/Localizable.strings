@@ -14,7 +14,7 @@
 "일부 그룹 또는 연락처 이름을 새로 읽지 못했습니다." = "Some group or contact names could not be refreshed.";
 "자동 번역 실패 · %@" = "Automatic translation failed · %@";
 "번역 실패 · %@" = "Translation failed · %@";
-"번역 완료 · Enter를 누르면 번역문을 전송합니다." = "Translation ready. Press Enter to send it.";
+"번역 완료 · 번역문을 수정한 뒤 Enter로 전송할 수 있습니다." = "Translation ready. Edit it if needed, then press Enter to send.";
 "위챗에서 전송을 수락했습니다." = "WeChat accepted the message.";
 "전송 실패 · %@" = "Send failed · %@";
 "전송 확인 대기 중 · 같은 문장을 다시 누르면 기존 요청의 결과를 확인합니다." = "Waiting for confirmation. Press Send again to check the existing request.";
