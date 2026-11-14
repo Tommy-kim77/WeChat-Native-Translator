@@ -5,10 +5,10 @@ struct RoomAvatar: View {
     let room: Room
     let members: [String]
     let images: [String: NSImage]
-    private let size: CGFloat = 40
+    var size: CGFloat = 40
 
     var body: some View {
-        Group {
+        MacWeChatAvatar(size: size) {
             switch room.id {
             case "filehelper":
                 ZStack {
@@ -27,8 +27,6 @@ struct RoomAvatar: View {
                 else { tile(images[room.id], size: size, group: room.isGroup) }
             }
         }
-        .frame(width: size, height: size)
-        .clipShape(RoundedRectangle(cornerRadius: 7))
         .accessibilityHidden(true)
     }
 
@@ -36,7 +34,7 @@ struct RoomAvatar: View {
         let ids = Array(members.prefix(9))
         let columns = ids.count > 4 ? 3 : 2
         let rowCount = (ids.count + columns - 1) / columns
-        let cellSize = (size - 4 - CGFloat(columns - 1) * 1.5) / CGFloat(columns)
+        let cellSize = (size - CGFloat(columns - 1) * 1.5) / CGFloat(columns)
         return VStack(spacing: 1.5) {
             ForEach(0..<rowCount, id: \.self) { row in
                 let start = row * columns

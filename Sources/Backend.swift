@@ -81,6 +81,11 @@ struct Message: Decodable, Identifiable, Equatable {
     let recall: Recall?
     let quote: Quote?
     var outgoing: Bool { direction == "outgoing" }
+    var date: Date? {
+        guard let createdAt else { return nil }
+        return (try? Date(createdAt, strategy: .iso8601))
+            ?? (try? Date(createdAt, strategy: .iso8601.time(includingFractionalSeconds: true)))
+    }
     var hasSender: Bool { type < 10000 && (direction == "incoming" || senderId != nil) }
     var isRecalled: Bool { recall != nil }
     var confirmedServerID: String? {

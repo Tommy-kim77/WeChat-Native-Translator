@@ -99,6 +99,18 @@ final class ChatModel: ObservableObject {
         }
     }
     @Published var translations: [String: String] = [:]
+    @Published private(set) var automaticTranslations: [String: String] = [:]
+    @Published var automaticTranslationEnabled: Bool {
+        didSet {
+            guard automaticTranslationEnabled != oldValue else { return }
+            preferences.set(automaticTranslationEnabled, forKey: "automaticTranslationEnabled")
+            if automaticTranslationEnabled { queueMessages() }
+            else {
+                stopAutomaticTranslation()
+                automaticTranslations.removeAll()
+            }
+        }
+    }
     @Published private(set) var previewDraft: MessageDraft?
     var preview: String? { previewDraft?.text }
     var canSend: Bool {
@@ -120,6 +132,7 @@ final class ChatModel: ObservableObject {
     private var automaticTask: Task<Void, Never>?
     private var manualTask: Task<Void, Never>?
     private(set) var translationGeneration = 0
+    private(set) var automaticTranslationGeneration = 0
     private var work: (id: UUID, draft: MessageDraft, message: String?, room: String, language: Language)?
     private var previewSource: (draft: MessageDraft, room: String, language: Language)?
     private var drafts: [String: MessageDraft] = [:]
@@ -130,7 +143,7 @@ final class ChatModel: ObservableObject {
     @Published private(set) var pendingGroupInvites: [String: [String]] = [:]
     private var groupInviteKeys: [String: String] = [:]
     private var rosterCheckedAt: [String: Date] = [:]
-    private var messageCache: [String: [Message]] = [:]
+    @Published private var messageCache: [String: [Message]] = [:]
     private var cacheOrder: [String] = []
     private var warmingHistory: Task<Void, Never>?
     private var lastRoomSwitch = Date.distantPast
@@ -159,6 +172,7 @@ final class ChatModel: ObservableObject {
         self.interfacePreference = preferences.string(forKey: "interfaceLanguage").flatMap(Language.init(rawValue:))
         self.received = preferences.string(forKey: "receivedLanguage").flatMap(Language.init(rawValue:)) ?? system
         self.outgoing = preferences.string(forKey: "outgoingLanguage").flatMap(Language.init(rawValue:)) ?? .english
+        self.automaticTranslationEnabled = preferences.object(forKey: "automaticTranslationEnabled") as? Bool ?? true
         self.translationProvider = preferences.string(forKey: "translationProvider").flatMap(TranslationProvider.init(rawValue:)) ?? .apple
         if translationProvider == .deepL { loadDeepLKey() }
     }
@@ -223,21 +237,28 @@ final class ChatModel: ObservableObject {
 
     private func resetTranslationEngine() {
         translationGeneration += 1
-        automaticTask?.cancel()
+        stopAutomaticTranslation()
         manualTask?.cancel()
-        automaticTask = nil
         manualTask = nil
-        activeAutomaticRoute = nil
-        inFlightTranslation = nil
         work = nil
         translating = false
         previewDraft = nil
         config = nil
-        automaticConfig = nil
         translationCache.removeAll()
         translationRetries.removeAll()
         deepLAutoRetryAfter = .distantPast
         refreshMessageTranslations()
+    }
+
+    private func stopAutomaticTranslation() {
+        automaticTranslationGeneration += 1
+        automaticTask?.cancel()
+        automaticTask = nil
+        activeAutomaticRoute = nil
+        inFlightTranslation = nil
+        queuedTranslations.removeAll()
+        nextTranslationRetry = .distantFuture
+        automaticConfig = nil
     }
 
     func listing(_ filter: RoomFilter) -> [Room] {
@@ -372,10 +393,16 @@ final class ChatModel: ObservableObject {
 
     private func rememberMessages(_ latest: [Message], in room: String) {
         for message in latest where message.isRecalled { confirmedRecalls.insert(message.id) }
-        messageCache[room] = latest
+        if messageCache[room] != latest { messageCache[room] = latest }
         cacheOrder.removeAll { $0 == room }
         cacheOrder.append(room)
         if cacheOrder.count > 50 { messageCache.removeValue(forKey: cacheOrder.removeFirst()) }
+    }
+
+    func latestMessage(in room: String) -> Message? {
+        let hidden = account.flatMap { hiddenMessageIDs[$0.id] } ?? []
+        let recent = selection == room ? messages : messageCache[room] ?? []
+        return recent.last { !hidden.contains($0.id) }
     }
 
     private func warmRecentHistory(_ account: String) {
@@ -673,10 +700,12 @@ final class ChatModel: ObservableObject {
 
     func refreshMessageTranslations() {
         translations.removeAll()
+        automaticTranslations.removeAll()
         queueMessages()
     }
 
     private func queueMessages() {
+        guard automaticTranslationEnabled else { return }
         var ready: [AutomaticTranslation] = []
         nextTranslationRetry = .distantFuture
         let now = Date()
@@ -688,7 +717,7 @@ final class ChatModel: ObservableObject {
             let job = AutomaticTranslation(messageID: message.id, text: text, source: source, target: received.rawValue, mixed: mixed)
             guard job.source != job.target, job != inFlightTranslation else { continue }
             if let cached = translationCache[job] {
-                if !cached.isEmpty, translations[job.messageID] != cached { translations[job.messageID] = cached }
+                if !cached.isEmpty, automaticTranslations[job.messageID] != cached { automaticTranslations[job.messageID] = cached }
             } else if let retry = translationRetries[job], retry > now {
                 nextTranslationRetry = min(nextTranslationRetry, retry)
             } else {
@@ -703,29 +732,29 @@ final class ChatModel: ObservableObject {
     }
 
     func runAutomaticTranslation(_ session: TranslationSession, generation: Int) async {
-        guard translationProvider == .apple, generation == translationGeneration, activeAutomaticRoute?.source != nil else { return }
+        guard translationProvider == .apple, generation == automaticTranslationGeneration, activeAutomaticRoute?.source != nil else { return }
         await runAutomaticTranslations(generation: generation) { job in
             try await session.translate(job.text).targetText
         }
     }
 
     private func runAutomaticTranslations(generation: Int, translate: (AutomaticTranslation) async throws -> String) async {
-        guard generation == translationGeneration, let route = activeAutomaticRoute else { return }
+        guard generation == automaticTranslationGeneration, let route = activeAutomaticRoute else { return }
         defer {
-            if generation == translationGeneration {
+            if generation == automaticTranslationGeneration {
                 inFlightTranslation = nil
                 activeAutomaticRoute = nil
                 automaticTask = nil
                 startAutomaticTranslation()
             }
         }
-        while !Task.isCancelled, generation == translationGeneration,
+        while !Task.isCancelled, generation == automaticTranslationGeneration,
               let index = queuedTranslations.firstIndex(where: { $0.source == route.source && $0.target == route.target }) {
             let job = queuedTranslations.remove(at: index)
             inFlightTranslation = job
             do {
                 let result = try await translate(job).trimmingCharacters(in: .whitespacesAndNewlines)
-                guard generation == translationGeneration, !Task.isCancelled else { return }
+                guard generation == automaticTranslationGeneration, !Task.isCancelled else { return }
                 if result.isEmpty { throw ConnectionError.invalidResponse }
                 if translationCache.count >= 4_000 {
                     let retained = Set(messageCache.values.flatMap { $0.map(\.id) })
@@ -736,10 +765,10 @@ final class ChatModel: ObservableObject {
                 translationRetries[job] = nil
                 if job.target == received.rawValue,
                    !translated.isEmpty, messages.contains(where: { $0.id == job.messageID && $0.body == job.text }) {
-                    translations[job.messageID] = translated
+                    automaticTranslations[job.messageID] = translated
                 }
             } catch {
-                guard generation == translationGeneration else { return }
+                guard generation == automaticTranslationGeneration else { return }
                 let retry = Date().addingTimeInterval(Task.isCancelled ? 2 : 30)
                 translationRetries[job] = retry
                 nextTranslationRetry = min(nextTranslationRetry, retry)
@@ -754,7 +783,8 @@ final class ChatModel: ObservableObject {
     }
 
     private func startAutomaticTranslation() {
-        guard activeAutomaticRoute == nil, let job = queuedTranslations.first, let target = Language(rawValue: job.target) else { return }
+        guard automaticTranslationEnabled, activeAutomaticRoute == nil,
+              let job = queuedTranslations.first, let target = Language(rawValue: job.target) else { return }
         if translationProvider == .deepL {
             guard let key = deepLKey else {
                 status = DeepLError.missingKey.displayMessage
@@ -762,7 +792,7 @@ final class ChatModel: ObservableObject {
             }
             guard Date() >= deepLAutoRetryAfter else { return }
             activeAutomaticRoute = (job.source, job.target)
-            let generation = translationGeneration
+            let generation = automaticTranslationGeneration
             automaticTask = Task {
                 await runAutomaticTranslations(generation: generation) { job in
                     if let mixed = job.mixed {
@@ -777,7 +807,7 @@ final class ChatModel: ObservableObject {
         }
         activeAutomaticRoute = (job.source, job.target)
         guard let code = job.source else {
-            let generation = translationGeneration
+            let generation = automaticTranslationGeneration
             automaticTask = Task {
                 await runAutomaticTranslations(generation: generation) { job in
                     guard let mixed = job.mixed else { throw ConnectionError.invalidResponse }
@@ -937,7 +967,7 @@ final class ChatModel: ObservableObject {
 
     func submitComposer() async {
         guard canSend else { return }
-        if confirmedPreview != nil { await send() }
+        if confirmedPreview != nil || !automaticTranslationEnabled { await send() }
         else { translate(draft) }
     }
 
@@ -1018,6 +1048,7 @@ final class ChatModel: ObservableObject {
             case "succeeded":
                 confirmedRecalls.insert(message.id)
                 translations[message.id] = nil
+                automaticTranslations[message.id] = nil
                 if selection == room { queueMessages() }
                 status = UIMessage("메시지를 회수했습니다.")
             case "failed", "cancelled":
@@ -1132,6 +1163,7 @@ struct ChatView: View {
     @State private var editingName = ""
     @State private var showingNameEditor = false
     @State private var showingLanguageSettings = false
+    @State private var showingTranslationOptions = false
     @State private var deepLKeyInput = ""
     @State private var showingChatInfo = false
     @State private var messageToRecall: Message?
@@ -1155,12 +1187,13 @@ struct ChatView: View {
             if model.connected { chats }
             else { login }
         }
-        .frame(minWidth: 820, minHeight: 620)
+        .frame(minWidth: 840, minHeight: 620)
+        .tint(MacWeChatStyle.action)
         .task { await model.start(); await model.poll() }
         .translationTask(model.config) { [generation = model.translationGeneration] session in
             await model.runTranslation(session, generation: generation)
         }
-        .translationTask(model.automaticConfig) { [generation = model.translationGeneration] session in
+        .translationTask(model.automaticConfig) { [generation = model.automaticTranslationGeneration] session in
             await model.runAutomaticTranslation(session, generation: generation)
         }
         .background(AppleTranslationRouteView(route: model.mixedAutomaticApple))
@@ -1184,168 +1217,340 @@ struct ChatView: View {
 
     private var login: some View {
         VStack(spacing: 18) {
-            Text(language.label("위챗 번역")).font(.largeTitle.bold())
+            Image(systemName: "bubble.left.and.bubble.right.fill")
+                .font(.system(size: 31, weight: .semibold))
+                .foregroundStyle(MacWeChatStyle.accent)
+                .frame(width: 72, height: 72)
+                .background(MacWeChatStyle.selection, in: RoundedRectangle(cornerRadius: 22))
+                .accessibilityHidden(true)
+            Text(language.label("위챗 번역")).font(.system(size: 27, weight: .semibold))
             if let qr = model.qr {
                 Image(nsImage: qr).resizable().interpolation(.none).scaledToFit().frame(width: 245, height: 245)
                     .accessibilityLabel(language.label("위챗 로그인 QR 코드"))
             }
-            Text(model.status.text(in: language)).foregroundStyle(.secondary).textSelection(.enabled)
+            Text(model.status.text(in: language))
+                .foregroundStyle(.secondary).textSelection(.enabled).multilineTextAlignment(.center)
             if model.loggingIn { Button(language.label("취소")) { loginTask?.cancel() } }
-            else if model.ready { Button(language.label("QR 로그인")) { loginTask = Task { await model.login() } }.buttonStyle(.borderedProminent) }
-            else { Button(language.label("다시 연결")) { Task { await model.start() } } }
-            languageSettings
-        }.padding(25)
+            else if model.ready {
+                Button(language.label("QR 로그인")) { loginTask = Task { await model.login() } }
+                    .buttonStyle(.borderedProminent)
+            } else { Button(language.label("다시 연결")) { Task { await model.start() } } }
+        }
+        .padding(32)
+        .frame(width: 388)
+        .background(MacWeChatStyle.panel, in: RoundedRectangle(cornerRadius: 24))
+        .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(MacWeChatStyle.border))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(MacWeChatStyle.surface)
+        .overlay(alignment: .topTrailing) { languageSettings.padding(16) }
     }
 
-    private var chats: some View {
+    private var navigationRail: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "bubble.left.and.bubble.right.fill")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(MacWeChatStyle.accent)
+                .frame(width: 44, height: 44)
+                .background(MacWeChatStyle.selection, in: Circle())
+                .accessibilityHidden(true)
+                .padding(.bottom, 12)
+            navigationButton("대화", icon: "bubble.left.and.bubble.right", filter: .all)
+            navigationButton("연락처", icon: "person", filter: .contacts)
+            navigationButton("그룹", icon: "person.2", filter: .groups)
+            Spacer()
+            languageSettings
+        }
+        .padding(.vertical, 18)
+        .frame(width: 68)
+        .frame(maxHeight: .infinity)
+        .background(MacWeChatStyle.rail)
+    }
+
+    private func navigationButton(_ label: String, icon: String, filter target: RoomFilter) -> some View {
+        let selected = filter == target || target == .all && filter == .chats
+        return Button(language.label(label), systemImage: icon) { filter = target }
+            .labelStyle(.iconOnly)
+            .buttonStyle(MacWeChatIconButton(selected: selected))
+            .help(language.label(label))
+            .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private var roomList: some View {
         let listed = model.listing(filter)
         let matches = listed.filter {
             search.isEmpty || $0.title(in: language).localizedCaseInsensitiveContains(search)
                 || model.englishSearchAlias($0)?.localizedCaseInsensitiveContains(search) == true
                 || ($0.isGroup && $0.id.localizedCaseInsensitiveContains(search))
         }
-        let selected = model.listing(.all).first { $0.id == model.selection }
-        return HSplitView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(language.label("대화")).font(.title2.bold())
-                Picker(language.label("목록"), selection: $filter) {
-                    ForEach(RoomFilter.allCases) { Text(language.label($0.rawValue)).tag($0) }
-                }.labelsHidden().pickerStyle(.segmented)
-                TextField(language.label("대화 검색"), text: $search)
-                HStack {
-                    Text(language.label("%@개", matches.count.formatted())).foregroundStyle(.secondary)
-                    Spacer()
-                    Button(language.label("목록 새로고침"), systemImage: "arrow.clockwise") { Task { await model.syncDirectoryNames() } }
-                        .labelStyle(.iconOnly).help(language.label("그룹과 연락처 다시 읽기"))
-                }.font(.caption)
-                if let status = model.directoryStatus { Text(status.text(in: language)).font(.caption).foregroundStyle(.secondary) }
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 3) {
-                        if search.isEmpty, filter == .all || filter == .chats, !listed.contains(where: { $0.id == "filehelper" }) {
-                            roomButton(Room(id: "filehelper", displayName: nil, unreadCount: nil))
-                        }
-                        ForEach(matches) { room in
-                            roomButton(room)
-                        }
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(language.label("대화")).font(.system(size: 20, weight: .semibold))
+                Spacer()
+                Button(language.label("목록 새로고침"), systemImage: "arrow.clockwise") {
+                    Task { await model.syncDirectoryNames() }
+                }.labelStyle(.iconOnly).buttonStyle(MacWeChatIconButton())
+                    .help(language.label("그룹과 연락처 다시 읽기"))
+            }
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
+                TextField(language.label("대화 검색"), text: $search).textFieldStyle(.plain)
+                if !search.isEmpty {
+                    Button(language.label("검색 지우기"), systemImage: "xmark.circle.fill") { search = "" }
+                        .labelStyle(.iconOnly).buttonStyle(.plain).foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .background(MacWeChatStyle.field, in: Capsule())
+            HStack(spacing: 4) {
+                ForEach(RoomFilter.allCases) { item in
+                    Button { filter = item } label: {
+                        Text(language.label(item.rawValue))
+                            .font(.system(size: 12, weight: filter == item ? .semibold : .regular))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 7)
+                            .foregroundStyle(filter == item ? MacWeChatStyle.accent : Color.secondary)
+                            .background(filter == item ? MacWeChatStyle.selection : .clear, in: Capsule())
+                            .contentShape(Capsule())
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(filter == item ? .isSelected : [])
                 }
-            }.padding(14).frame(minWidth: 215, idealWidth: 250, maxWidth: 300)
-
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text(selected?.title(in: language) ?? language.label(model.selection == "filehelper" ? "파일 전송" : "대화를 선택하세요"))
-                        .font(.title2.bold())
-                    Spacer()
-                    picker("번역 언어", $model.received)
-                    languageSettings
-                    if let room = model.selection {
-                        Button(language.label("대화 기록 검색"), systemImage: "magnifyingglass") { showingHistorySearch.toggle() }
-                            .labelStyle(.iconOnly)
-                            .help(language.label("대화 기록 검색"))
-                            .popover(isPresented: $showingHistorySearch, arrowEdge: .bottom) {
-                                ChatHistorySearch(model: model, room: room).id(room)
-                            }
+            }
+            if let status = model.directoryStatus {
+                Text(status.text(in: language)).font(.caption).foregroundStyle(.secondary)
+            }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 3) {
+                    if search.isEmpty, filter == .all || filter == .chats, !listed.contains(where: { $0.id == "filehelper" }) {
+                        roomButton(Room(id: "filehelper", displayName: nil, unreadCount: nil))
                     }
-                    if let room = selected, !["filehelper", "brandsessionholder"].contains(room.id) { chatInfo(room) }
+                    ForEach(matches) { room in roomButton(room) }
                 }
-                Divider()
-                ScrollViewReader { scroller in
-                    ScrollView {
-                        LazyVStack(spacing: 10) {
-                            if model.loadingMessages { ProgressView(language.label("대화 불러오는 중…")).padding(.top, 28) }
-                            else if model.visibleMessages.isEmpty, model.selection != nil { Text(language.label("표시할 메시지가 없습니다.")).foregroundStyle(.secondary).padding(.top, 28) }
-                            if let room = model.selection {
-                                ForEach(model.visibleMessages) { message in bubble(message, in: room) }
-                            }
-                            Color.clear.frame(height: 1).id("latest")
-                        }
-                    }.onChange(of: model.messages.last?.id) { _, _ in scroller.scrollTo("latest", anchor: .bottom) }
-                }
-                if let room = model.selection {
-                    Divider()
-                    if let message = model.quotedMessage {
-                        HStack {
-                            Label(quotePreview(message, in: room), systemImage: "quote.bubble")
-                                .lineLimit(1).foregroundStyle(.secondary)
-                            Spacer()
-                            Button(language.label("인용 취소"), systemImage: "xmark") { model.setQuote(nil, in: room) }
-                                .labelStyle(.iconOnly).disabled(model.sending)
-                        }.font(.caption)
-                    }
-                    if let query = mentionQuery { mentionPicker(room: room, query: query) }
-                    MessageComposer(text: model.draft, label: language.label("위챗 초안"), placement: composerPlacement,
-                                    onEdit: { text, edit, caret in
-                        guard model.selection == room else { return }
-                        dismissedMention = nil
-                        model.updateDraft(text, edit: edit, in: room)
-                        editorSelection = caret
-                    }, onSelection: { caret in
-                        if model.selection == room { editorSelection = caret }
-                    }, navigate: { navigateMentions($0, room: room) }) {
-                        if let query = mentionQuery {
-                            let choices = mentionChoices(room, query: query)
-                            if !choices.isEmpty { chooseMention(choices[min(mentionIndex, choices.count - 1)], query: query, room: room) }
-                        } else {
-                            Task { await model.submitComposer() }
-                        }
-                    }.id(room).frame(height: 84)
-                        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.quaternary))
-                    if let preview = model.preview {
-                        MessageComposer(text: preview, editable: !model.sending, label: language.label("번역문"),
-                                        onEdit: { text, edit, _ in model.updatePreview(text, edit: edit, in: room) }) {
-                            Task { await model.submitComposer() }
-                        }.frame(height: 60)
-                            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.quaternary))
-                    }
-                    if let file = model.attachments[room] {
-                        HStack {
-                            Label(file.file.lastPathComponent, systemImage: "doc").lineLimit(1)
-                            Spacer()
-                            Button(language.label("첨부 제거"), systemImage: "xmark") { model.removeFile(room) }.labelStyle(.iconOnly)
-                                .disabled(model.sendingFiles.contains(room))
-                            Button(language.label(model.sendingFiles.contains(room) ? "파일 전송 중…" : file.source == nil ? "파일 보내기" : "전송 확인")) {
-                                Task { await model.sendFile() }
-                            }.disabled(model.sendingFiles.contains(room))
-                        }
-                    }
-                    HStack {
-                        if room.hasSuffix("@chatroom") {
-                            Button(language.label("멤버 멘션"), systemImage: "at") { beginMention(in: room) }
-                                .labelStyle(.iconOnly).help(language.label("멤버 멘션"))
-                        }
-                        Button(language.label("파일 첨부"), systemImage: "paperclip") { model.chooseFile() }.labelStyle(.iconOnly).help(language.label("파일 첨부"))
-                            .disabled(model.attachments[room] != nil)
-                        picker("보낼 글", $model.outgoing)
-                        Button(language.label("초안 번역")) { model.translate(model.draft) }.disabled(model.draft.isEmpty || model.translating)
-                        Spacer()
-                        Text(language.label(model.preview == nil ? "Enter: 번역 · Shift+Enter: 줄바꿈" : "Enter: 번역문 전송"))
-                            .font(.caption).foregroundStyle(.secondary)
-                        Button(language.label("전송")) { Task { await model.send() } }.buttonStyle(.borderedProminent)
-                            .disabled(!model.canSend)
-                    }
-                }
-                HStack {
-                    Text(model.status.text(in: language)).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
-                    if model.lastHiddenMessage != nil {
-                        Button(language.label("최근 숨김 취소")) { model.undoHideMessage() }.buttonStyle(.link)
-                    }
-                }
-            }.padding(18).frame(minWidth: 515)
-                .task(id: model.selection) {
-                    if let room = model.selection { await model.watchMessages(in: room) }
-                }
-                .task(id: model.selection) {
-                    if let room = model.selection, room.hasSuffix("@chatroom") { await model.loadGroupRoster(room) }
-                }
-                .onChange(of: mentionQuery) { _, _ in mentionIndex = 0 }
-                .onChange(of: model.selection) { _, _ in
-                    editorSelection = nil
-                    composerPlacement = nil
-                    dismissedMention = nil
-                    showingChatInfo = false
-                    showingHistorySearch = false
-                }
+            }
         }
+        .padding(12)
+        .frame(minWidth: 220, idealWidth: 260, maxWidth: 300)
+        .background(MacWeChatStyle.panel)
+    }
+
+    private var translationControl: some View {
+        let title = language.label(model.automaticTranslationEnabled ? "자동 번역 켜짐" : "자동 번역 꺼짐")
+        return Button { showingTranslationOptions.toggle() } label: {
+            HStack(spacing: 6) {
+                Label(title, systemImage: "translate")
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                    .accessibilityHidden(true)
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(model.automaticTranslationEnabled ? MacWeChatStyle.accent : Color.secondary)
+            .padding(.horizontal, 11).padding(.vertical, 7)
+            .background(model.automaticTranslationEnabled ? MacWeChatStyle.selection : MacWeChatStyle.field, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain).fixedSize()
+        .popover(isPresented: $showingTranslationOptions, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle(language.label("자동 번역"), isOn: $model.automaticTranslationEnabled)
+                    .toggleStyle(.switch)
+                Divider()
+                picker("받는 메시지 번역", $model.received)
+                picker("보내는 메시지 번역", $model.outgoing)
+            }.padding(14)
+        }
+    }
+
+    private func avatar(for room: Room, size: CGFloat = 40) -> some View {
+        RoomAvatar(room: room, members: model.groupAvatarMembers[room.id] ?? [], images: model.avatarImages, size: size)
+    }
+
+    private var chats: some View {
+        let selected = model.selection.map { id in
+            model.listing(.all).first { $0.id == id } ?? Room(id: id, displayName: nil, unreadCount: nil)
+        }
+        return HStack(spacing: 0) {
+            navigationRail
+            Rectangle().fill(MacWeChatStyle.border).frame(width: 1)
+            HSplitView {
+                roomList
+                conversation(selected)
+            }
+        }
+    }
+
+    private func conversation(_ selected: Room?) -> some View {
+        let messages = model.visibleMessages
+        let calendar = Calendar.current
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                if let selected { avatar(for: selected, size: 38) }
+                Text(selected?.title(in: language) ?? language.label("대화를 선택하세요"))
+                    .font(.system(size: 19, weight: .semibold)).lineLimit(1)
+                    .layoutPriority(1)
+                Spacer(minLength: 8)
+                if let room = selected {
+                    translationControl
+                    Button(language.label("대화 기록 검색"), systemImage: "magnifyingglass") { showingHistorySearch.toggle() }
+                        .labelStyle(.iconOnly).buttonStyle(MacWeChatIconButton())
+                        .help(language.label("대화 기록 검색"))
+                        .popover(isPresented: $showingHistorySearch, arrowEdge: .bottom) {
+                            ChatHistorySearch(model: model, room: room.id).id(room.id)
+                        }
+                    if !["filehelper", "brandsessionholder"].contains(room.id) { chatInfo(room) }
+                }
+            }
+            .padding(.horizontal, 18).padding(.vertical, 11)
+            .frame(minHeight: 61)
+            .background(MacWeChatStyle.panel)
+            Rectangle().fill(MacWeChatStyle.border).frame(height: 1)
+            ScrollViewReader { scroller in
+                ScrollView {
+                    VStack(spacing: 14) {
+                        if model.loadingMessages { ProgressView(language.label("대화 불러오는 중…")).padding(.top, 28) }
+                        else if messages.isEmpty, selected != nil { Text(language.label("표시할 메시지가 없습니다.")).foregroundStyle(.secondary).padding(.top, 28) }
+                        if let selected {
+                            ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
+                                if let date = message.date,
+                                   index == 0 || messages[index - 1].date.map({ !calendar.isDate($0, inSameDayAs: date) }) == true {
+                                    messageDay(date, isToday: calendar.isDateInToday(date))
+                                }
+                                bubble(message, in: selected)
+                            }
+                        }
+                        Color.clear.frame(height: 1).id("latest")
+                    }
+                    .padding(.horizontal, 18).padding(.top, 14)
+                }
+                .onAppear { scroller.scrollTo("latest", anchor: .bottom) }
+                .onChange(of: model.messages.last?.id) { _, _ in scroller.scrollTo("latest", anchor: .bottom) }
+            }
+            if let room = selected?.id { composer(room) }
+            HStack {
+                Text(model.status.text(in: language)).font(.caption).foregroundStyle(.secondary)
+                    .textSelection(.enabled).lineLimit(2)
+                if model.lastHiddenMessage != nil {
+                    Button(language.label("최근 숨김 취소")) { model.undoHideMessage() }.buttonStyle(.link)
+                }
+            }
+            .padding(.horizontal, 18).padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(minWidth: 515, maxWidth: .infinity, maxHeight: .infinity)
+        .background(MacWeChatStyle.surface)
+        .task(id: model.selection) {
+            if let room = model.selection { await model.watchMessages(in: room) }
+        }
+        .task(id: model.selection) {
+            if let room = model.selection, room.hasSuffix("@chatroom") { await model.loadGroupRoster(room) }
+        }
+        .onChange(of: mentionQuery) { _, _ in mentionIndex = 0 }
+        .onChange(of: model.selection) { _, _ in
+            editorSelection = nil
+            composerPlacement = nil
+            dismissedMention = nil
+            showingChatInfo = false
+            showingHistorySearch = false
+            showingTranslationOptions = false
+        }
+    }
+
+    private func messageDay(_ date: Date, isToday: Bool) -> some View {
+        let label = isToday ? language.label("오늘")
+            : date.formatted(.dateTime.year().month().day().locale(Locale(identifier: language.rawValue)))
+        return Text(label)
+            .font(.caption.weight(.medium)).foregroundStyle(.secondary)
+            .padding(.horizontal, 12).padding(.vertical, 4)
+            .background(MacWeChatStyle.panel, in: Capsule())
+            .overlay(Capsule().strokeBorder(MacWeChatStyle.border))
+    }
+
+    private func composer(_ room: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let message = model.quotedMessage {
+                HStack {
+                    Label(quotePreview(message, in: room), systemImage: "quote.bubble")
+                        .lineLimit(1).foregroundStyle(.secondary)
+                    Spacer()
+                    Button(language.label("인용 취소"), systemImage: "xmark") { model.setQuote(nil, in: room) }
+                        .labelStyle(.iconOnly).disabled(model.sending)
+                }.font(.caption)
+            }
+            if let query = mentionQuery { mentionPicker(room: room, query: query) }
+            MessageComposer(text: model.draft, label: language.label("위챗 초안"), placement: composerPlacement,
+                            onEdit: { text, edit, caret in
+                guard model.selection == room else { return }
+                dismissedMention = nil
+                model.updateDraft(text, edit: edit, in: room)
+                editorSelection = caret
+            }, onSelection: { caret in
+                if model.selection == room { editorSelection = caret }
+            }, navigate: { navigateMentions($0, room: room) }) {
+                if let query = mentionQuery {
+                    let choices = mentionChoices(room, query: query)
+                    if !choices.isEmpty { chooseMention(choices[min(mentionIndex, choices.count - 1)], query: query, room: room) }
+                } else {
+                    Task { await model.submitComposer() }
+                }
+            }.id(room).frame(height: 66)
+                .background(alignment: .topLeading) {
+                    RoundedRectangle(cornerRadius: 13).fill(MacWeChatStyle.field)
+                    if model.draft.isEmpty {
+                        Text(language.label("메시지 입력…")).font(.system(size: 14))
+                            .foregroundStyle(.secondary).padding(.leading, 14).padding(.top, 9)
+                            .accessibilityHidden(true).allowsHitTesting(false)
+                    }
+                }
+            if let preview = model.preview {
+                Label(language.label("%@ 번역 미리보기", model.outgoing.title), systemImage: "translate")
+                    .font(.caption.weight(.semibold)).foregroundStyle(MacWeChatStyle.accent)
+                MessageComposer(text: preview, editable: !model.sending, label: language.label("번역문"),
+                                onEdit: { text, edit, _ in model.updatePreview(text, edit: edit, in: room) }) {
+                    Task { await model.submitComposer() }
+                }.id(room).frame(height: 56)
+                    .background(MacWeChatStyle.selection, in: RoundedRectangle(cornerRadius: 11))
+            }
+            if let file = model.attachments[room] {
+                HStack {
+                    Label(file.file.lastPathComponent, systemImage: "doc").lineLimit(1)
+                    Spacer()
+                    Button(language.label("첨부 제거"), systemImage: "xmark") { model.removeFile(room) }.labelStyle(.iconOnly)
+                        .disabled(model.sendingFiles.contains(room))
+                    Button(language.label(model.sendingFiles.contains(room) ? "파일 전송 중…" : file.source == nil ? "파일 보내기" : "전송 확인")) {
+                        Task { await model.sendFile() }
+                    }.disabled(model.sendingFiles.contains(room))
+                }
+            }
+            HStack(spacing: 6) {
+                Button(language.label("파일 첨부"), systemImage: "paperclip") { model.chooseFile() }
+                    .labelStyle(.iconOnly).buttonStyle(MacWeChatIconButton()).help(language.label("파일 첨부"))
+                    .disabled(model.attachments[room] != nil)
+                if room.hasSuffix("@chatroom") {
+                    Button(language.label("멤버 멘션"), systemImage: "at") { beginMention(in: room) }
+                        .labelStyle(.iconOnly).buttonStyle(MacWeChatIconButton()).help(language.label("멤버 멘션"))
+                }
+                Spacer(minLength: 4)
+                Text(language.label(model.preview == nil && model.automaticTranslationEnabled
+                                    ? "Enter: 번역 · Shift+Enter: 줄바꿈" : "Enter: 전송 · Shift+Enter: 줄바꿈"))
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Button(language.label("초안 번역"), systemImage: "translate") { model.translate(model.draft) }
+                    .labelStyle(.iconOnly).buttonStyle(MacWeChatIconButton(selected: model.preview != nil))
+                    .help(language.label("초안 번역")).disabled(model.draft.isEmpty || model.translating || model.sending)
+                Button { Task { await model.send() } } label: {
+                    Image(systemName: "paperplane.fill").font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 37, height: 37)
+                        .background(MacWeChatStyle.action, in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .opacity(model.canSend ? 1 : 0.45)
+                .disabled(!model.canSend)
+                .accessibilityLabel(language.label("전송")).help(language.label("전송"))
+            }
+        }
+        .padding(10)
+        .background(MacWeChatStyle.panel, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(MacWeChatStyle.border))
+        .padding(.horizontal, 14)
     }
 
     private func mentionChoices(_ room: String, query: MentionQuery) -> [GroupMember] {
@@ -1410,6 +1615,7 @@ struct ChatView: View {
     private func chatInfo(_ room: Room) -> some View {
         Button(language.label(room.isGroup ? "그룹 정보" : "연락처 프로필"), systemImage: "ellipsis") { showingChatInfo.toggle() }
             .labelStyle(.iconOnly)
+            .buttonStyle(MacWeChatIconButton())
             .help(language.label(room.isGroup ? "그룹 정보" : "연락처 프로필"))
             .popover(isPresented: $showingChatInfo, arrowEdge: .bottom) {
                 if room.isGroup {
@@ -1449,6 +1655,7 @@ struct ChatView: View {
     private var languageSettings: some View {
         Button(language.label("언어 설정"), systemImage: "gearshape") { showingLanguageSettings.toggle() }
             .labelStyle(.iconOnly)
+            .buttonStyle(MacWeChatIconButton())
             .help(language.label("언어 설정"))
             .popover(isPresented: $showingLanguageSettings, arrowEdge: .bottom) {
                 VStack(alignment: .leading, spacing: 12) {
@@ -1459,6 +1666,7 @@ struct ChatView: View {
                     }
                     picker("받는 메시지 번역", $model.received)
                     picker("보내는 메시지 번역", $model.outgoing)
+                    Toggle(language.label("자동 번역"), isOn: $model.automaticTranslationEnabled)
                     Divider()
                     Picker(language.label("번역 엔진"), selection: Binding(get: { model.translationProvider }, set: model.selectTranslationProvider)) {
                         ForEach(TranslationProvider.allCases) { Text($0.title).tag($0) }
@@ -1497,20 +1705,39 @@ struct ChatView: View {
         let members = model.groupAvatarMembers[room.id] ?? []
         let photoCount = members.filter { model.avatarImages[$0] != nil }.count
         let title = room.title(in: language)
+        let latest = model.latestMessage(in: room.id)
+        let unread = model.unreadCount(for: room)
         return Button { model.select(room.id) } label: {
-            HStack(spacing: 10) {
-                RoomAvatar(room: room, members: members, images: model.avatarImages)
-                Text(title).lineLimit(1)
-                Spacer()
-                let unread = model.unreadCount(for: room)
-                if unread > 0 { Text("\(unread)").foregroundStyle(.secondary) }
+            HStack(spacing: 9) {
+                avatar(for: room)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                    if let latest {
+                        Text(quotePreview(latest, in: room.id)).font(.caption)
+                            .foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .trailing, spacing: 5) {
+                    if let date = latest?.date {
+                        Text(date, format: .dateTime.hour().minute().locale(Locale(identifier: language.rawValue)))
+                            .font(.caption2).foregroundStyle(.secondary).fixedSize()
+                    }
+                    if unread > 0 {
+                        Text(unread.formatted()).font(.caption2.weight(.semibold)).monospacedDigit()
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 5).frame(minWidth: 18, minHeight: 18)
+                            .background(MacWeChatStyle.action, in: Capsule())
+                            .accessibilityLabel(language.label("읽지 않은 메시지 %@개", unread.formatted()))
+                    }
+                }
             }
-            .padding(.vertical, 5).padding(.horizontal, 8)
-            .background(model.selection == room.id ? Color.accentColor.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 5))
-            .contentShape(Rectangle())
+            .padding(.vertical, 8).padding(.horizontal, 8)
+            .background(model.selection == room.id ? MacWeChatStyle.selection : .clear, in: RoundedRectangle(cornerRadius: 12))
+            .contentShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
+        .accessibilityAddTraits(model.selection == room.id ? .isSelected : [])
         .accessibilityValue(room.isGroup ? (photoCount > 0 ? language.label("그룹 참가자 사진 %@개", String(photoCount)) : "") : (model.avatarImages[room.id] != nil ? language.label("프로필 사진") : ""))
         .help(room.isGroup && room.name == nil ? room.id : title)
         .onAppear { model.showAvatar(for: room) }
@@ -1524,24 +1751,26 @@ struct ChatView: View {
         }
     }
 
-    private func bubble(_ message: Message, in room: String) -> some View {
+    private func bubble(_ message: Message, in room: Room) -> some View {
         let recalled = model.isRecalled(message)
-        let showSender = room.hasSuffix("@chatroom") && !message.outgoing && message.hasSender && !recalled
-        return HStack(alignment: .top, spacing: 8) {
-            if message.outgoing { Spacer(minLength: 65) }
-            if showSender { groupSenderAvatar(message.senderId, in: room) }
+        let showAvatar = !message.outgoing && message.hasSender && !recalled
+        let showSender = room.isGroup && showAvatar
+        return HStack(alignment: .top, spacing: 7) {
+            if message.outgoing { Spacer(minLength: 52) }
+            if showSender { groupSenderAvatar(message.senderId, in: room.id) }
+            else if showAvatar { avatar(for: room, size: 34) }
             VStack(alignment: .leading, spacing: 4) {
                 if showSender {
-                    Text(model.groupSenderName(message.senderId, in: room))
+                    Text(model.groupSenderName(message.senderId, in: room.id))
                         .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                 }
                 messageContent(message, recalled: recalled)
             }
             .contextMenu {
-                messageActions(message, in: room)
+                messageActions(message, in: room.id)
             }
             Menu {
-                messageActions(message, in: room)
+                messageActions(message, in: room.id)
             } label: {
                 Label(language.label("메시지 메뉴"), systemImage: "ellipsis").labelStyle(.iconOnly)
                     .foregroundStyle(.secondary)
@@ -1549,7 +1778,7 @@ struct ChatView: View {
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             .help(language.label("메시지 메뉴"))
             .padding(.top, showSender ? 21 : 4)
-            if !message.outgoing { Spacer(minLength: 65) }
+            if !message.outgoing { Spacer(minLength: 52) }
         }
     }
 
@@ -1574,16 +1803,16 @@ struct ChatView: View {
     }
 
     private func groupSenderAvatar(_ id: String?, in room: String) -> some View {
-        ZStack {
-            Color.secondary.opacity(0.13)
-            if let id, let image = model.avatarImages[id] {
-                Image(nsImage: image).resizable().scaledToFill()
-            } else {
-                Image(systemName: "person.fill").font(.system(size: 15)).foregroundStyle(.secondary)
+        MacWeChatAvatar(size: 34) {
+            ZStack {
+                MacWeChatStyle.field
+                if let id, let image = model.avatarImages[id] {
+                    Image(nsImage: image).resizable().scaledToFill()
+                } else {
+                    Image(systemName: "person.fill").font(.system(size: 15)).foregroundStyle(.secondary)
+                }
             }
         }
-        .frame(width: 34, height: 34)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
         .accessibilityHidden(true)
         .onAppear { if let id { model.showGroupSenderAvatar(id, in: room) } }
     }
@@ -1597,18 +1826,27 @@ struct ChatView: View {
     }
 
     private func messageContent(_ message: Message, recalled: Bool) -> some View {
-            VStack(alignment: .leading, spacing: 6) {
-                if recalled {
-                    Text(language.label("회수된 메시지")).foregroundStyle(.secondary)
-                } else if let attachment = message.attachmentLabelKey {
-                    Label(message.body ?? language.label(attachment), systemImage: "doc").textSelection(.enabled)
-                    Button(language.label(model.downloading.contains(message.id) ? "가져오는 중…" : "첨부파일 저장…"), systemImage: "arrow.down.to.line") {
-                        Task { await model.saveAttachment(message) }
-                    }.buttonStyle(.link).disabled(model.downloading.contains(message.id))
-                } else { Text(message.body ?? language.label("[첨부 또는 시스템 메시지]")).textSelection(.enabled) }
-                if !recalled, let translated = model.translations[message.id] { Divider(); Text(translated).textSelection(.enabled) }
-                if !recalled, message.hasTranslatableText, let body = message.body, model.translations[message.id] == nil {
-                    Button(language.label("번역")) { model.translate(body, message: message.id) }.buttonStyle(.link).disabled(model.translating)
+        let manualTranslation = model.translations[message.id]
+        let translation = manualTranslation ?? model.automaticTranslations[message.id]
+        return MacWeChatBubble(outgoing: message.outgoing) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    messageBody(message, recalled: recalled)
+                        .font(.system(size: 14)).layoutPriority(1)
+                    if let date = message.date {
+                        Text(date, format: .dateTime.hour().minute().locale(Locale(identifier: language.rawValue)))
+                            .font(.caption2).foregroundStyle(.secondary).fixedSize()
+                    }
+                }
+                if !recalled, let translation {
+                    Divider()
+                    Label(language.label(manualTranslation == nil ? "%@ 자동 번역" : "%@ 번역", model.received.title),
+                          systemImage: "translate")
+                        .font(.caption.weight(.semibold)).foregroundStyle(MacWeChatStyle.accent)
+                    Text(translation).font(.system(size: 14)).textSelection(.enabled)
+                } else if !recalled, message.hasTranslatableText, let body = message.body {
+                    Button(language.label("번역"), systemImage: "translate") { model.translate(body, message: message.id) }
+                        .font(.caption).buttonStyle(.link).disabled(model.translating)
                 }
                 if !recalled, let quote = message.quote {
                     let text = quote.state == "recalled" ? language.label("회수된 메시지")
@@ -1617,7 +1855,25 @@ struct ChatView: View {
                     Label(quote.senderName.map { "\($0) · \(text)" } ?? text, systemImage: "quote.bubble")
                         .font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 }
-            }.padding(10).background(message.outgoing ? Color.green.opacity(0.2) : Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+            }.fixedSize(horizontal: false, vertical: true)
+        }.frame(maxWidth: 455, alignment: message.outgoing ? .trailing : .leading)
+    }
+
+    @ViewBuilder
+    private func messageBody(_ message: Message, recalled: Bool) -> some View {
+        if recalled {
+            Text(language.label("회수된 메시지")).foregroundStyle(.secondary)
+        } else if let attachment = message.attachmentLabelKey {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(message.body ?? language.label(attachment), systemImage: "doc").textSelection(.enabled)
+                Button(language.label(model.downloading.contains(message.id) ? "가져오는 중…" : "첨부파일 저장…"),
+                       systemImage: "arrow.down.to.line") {
+                    Task { await model.saveAttachment(message) }
+                }.buttonStyle(.link).disabled(model.downloading.contains(message.id))
+            }
+        } else {
+            Text(message.body ?? language.label("[첨부 또는 시스템 메시지]")).textSelection(.enabled)
+        }
     }
 
     private func picker(_ label: String, _ selection: Binding<Language>) -> some View {

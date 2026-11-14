@@ -167,3 +167,14 @@
 "검색 결과 더 보기" = "More results";
 "대화 기록 검색 실패 · %@" = "Chat history search failed · %@";
 "메시지 메뉴" = "Message menu";
+"검색 지우기" = "Clear search";
+"오늘" = "Today";
+"자동 번역" = "Automatic translation";
+"자동 번역 켜짐" = "Auto-translate on";
+"자동 번역 꺼짐" = "Auto-translate off";
+"%@ 자동 번역" = "%@ auto-translation";
+"%@ 번역" = "%@ translation";
+"%@ 번역 미리보기" = "%@ translation preview";
+"메시지 입력…" = "Write a message…";
+"읽지 않은 메시지 %@개" = "%@ unread messages";
+"Enter: 전송 · Shift+Enter: 줄바꿈" = "Enter to send · Shift+Enter for a new line";

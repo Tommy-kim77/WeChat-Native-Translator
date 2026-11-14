@@ -21,13 +21,15 @@ struct MessageComposer: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
         let editor = scroll.documentView as! NSTextView
+        scroll.drawsBackground = false
+        editor.drawsBackground = false
         editor.delegate = context.coordinator
         editor.isRichText = false
         editor.importsGraphics = false
         editor.isEditable = editable
         editor.allowsUndo = editable
-        editor.font = .systemFont(ofSize: NSFont.systemFontSize)
-        editor.textContainerInset = NSSize(width: 5, height: 6)
+        editor.font = .systemFont(ofSize: 14)
+        editor.textContainerInset = NSSize(width: 9, height: 9)
         editor.setAccessibilityLabel(label)
         editor.string = text
         return scroll

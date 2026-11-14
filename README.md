@@ -7,7 +7,7 @@ An independent macOS client for WeChat with built-in translation. It connects th
 - Automatically translate Korean, English and Simplified Chinese messages, including quoted replies, into the selected incoming language.
 - Use the macOS preferred language for the app interface and the initial incoming translation. Open Language settings to choose the interface language, incoming translation and outgoing translation separately. The app remembers each selection.
 - Apple Translation is the default and needs no API key. To use DeepL, choose it in Language settings and verify your own [DeepL API key](https://developers.deepl.com/docs/getting-started/auth). The app stores the key in macOS Keychain. DeepL receives the text it translates, and those requests count toward your DeepL API usage.
-- Press Enter to preview an outgoing translation. Edit the translation if needed, then press Enter or click Send. Use Shift+Enter for a new line.
+- Open the translation menu in the chat header to choose languages or toggle automatic translation. When it is on, Enter previews the outgoing translation. Edit the preview if needed, then press Enter or click Send. When it is off and there is no preview, Enter sends the draft directly. The translation button can still create a preview. Use Shift+Enter for a new line.
 - Browse chats with their original names, contact photos and group avatars. Recently loaded conversations appear while the app refreshes their history.
 - In group chats, incoming messages show the sender's WeChat display name and profile photo when available. Search any conversation's locally synced message history using the magnifying glass.
 - Use the message's `…` menu to copy the original text, quote a message, hide a message in this app, or ask WeChat to recall a message you sent. WeChat determines recall eligibility.
@@ -16,7 +16,7 @@ An independent macOS client for WeChat with built-in translation. It connects th
 
 ## Build on macOS
 
-Version 0.2.3 targets Apple Silicon and macOS 15 or later. Install the Xcode command-line tools and obtain the Apple Silicon `wx` binary from [Agent WeChat v2.3.0](https://github.com/thisnick/agent-wechat/releases/tag/v2.3.0). Follow the upstream [binary verification instructions](https://thisnick.github.io/agent-wechat/setup/install/) and make the downloaded file executable. From this directory run:
+Version 0.2.4 targets Apple Silicon and macOS 15 or later. Install the Xcode command-line tools and obtain the Apple Silicon `wx` binary from [Agent WeChat v2.3.0](https://github.com/thisnick/agent-wechat/releases/tag/v2.3.0). Follow the upstream [binary verification instructions](https://thisnick.github.io/agent-wechat/setup/install/) and make the downloaded file executable. From this directory run:
 
 ```sh
 bash build.sh /absolute/path/to/wx-v2.3.0-darwin-arm64
@@ -35,6 +35,8 @@ The current source builds the macOS app. Windows is a proposed port. This is a c
 위챗 모바일 앱으로 QR을 스캔하면 맥에서 대화할 수 있습니다. 앱 화면과 받는 메시지의 기본 번역 언어는 맥의 선호 언어를 따릅니다. **언어 설정**에서 앱 화면, 받는 메시지 번역, 보내는 메시지 번역을 각각 선택할 수 있으며 앱을 다시 실행해도 설정이 유지됩니다. 한국어·영어·중국어 간 자동 번역과 인용 답장을 지원합니다. 메시지 입력 후 Enter를 누르면 번역문이 표시됩니다. 번역문을 직접 수정한 뒤 Enter를 누르거나 **전송**을 클릭하면 수정한 내용이 전송됩니다. Shift+Enter는 줄바꿈입니다. 대화방 이름은 원문 그대로 표시하며 파일 송수신을 지원합니다.
 
 현재 버전은 Apple Silicon 맥과 macOS 15 이상용입니다. 빌드에는 Xcode 명령줄 도구와 위에서 안내한 Agent WeChat `wx` 실행 파일이 필요합니다.
+
+대화 상단의 **자동 번역** 메뉴에서 번역 언어를 선택하고 자동 번역을 켜거나 끌 수 있습니다. 자동 번역이 꺼져 있고 미리보기가 없으면 Enter로 원문을 바로 보냅니다. 입력란의 번역 아이콘을 누르면 수동으로 미리보기를 만들 수 있습니다.
 
 그룹에서 받은 메시지 위에 보낸 사람 이름과 프로필 사진을 표시합니다. 돋보기로 이 기기에 동기화된 대화 기록을 검색할 수 있습니다. 말풍선 옆 `…` 메뉴에서 복사, 인용 답장, 이 앱에서 숨기기를 사용할 수 있습니다. 내가 보낸 메시지는 위챗이 허용하는 경우 상대방 화면에서도 회수할 수 있습니다.
 

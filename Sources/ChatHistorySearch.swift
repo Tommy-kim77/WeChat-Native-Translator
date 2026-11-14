@@ -34,7 +34,7 @@ struct ChatHistorySearch: View {
                                     if message.outgoing || room.hasSuffix("@chatroom") && message.hasSender {
                                         Text(message.outgoing ? language.label("나") : model.groupSenderName(message.senderId, in: room))
                                     }
-                                    if let timestamp = message.createdAt, let date = try? Date(timestamp, strategy: .iso8601) {
+                                    if let date = message.date {
                                         Text(date, format: .dateTime.month().day().hour().minute())
                                     }
                                 }
