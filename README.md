@@ -8,7 +8,7 @@ An independent macOS client for WeChat with built-in translation. It connects th
 - Use the macOS preferred language for the app interface and the initial incoming translation. Open Language settings to choose the interface language, incoming translation and outgoing translation separately. The app remembers each selection.
 - Apple Translation is the default and needs no API key. To use DeepL, choose it in Language settings and verify your own [DeepL API key](https://developers.deepl.com/docs/getting-started/auth). The app stores the key in macOS Keychain. DeepL receives the text it translates, and those requests count toward your DeepL API usage.
 - Open the translation menu in the chat header to choose languages or toggle automatic translation. When it is on, Enter previews the outgoing translation. Edit the preview if needed, then press Enter or click Send. When it is off and there is no preview, Enter sends the draft directly. The translation button can still create a preview. Use Shift+Enter for a new line.
-- Browse chats with their original names, contact photos and group avatars. Recently loaded conversations appear while the app refreshes their history.
+- Browse chats in the order provided by the local WeChat engine, with conversation names, latest-message previews, contact photos and group avatars. In All, directory entries without a synced chat appear below the chats.
 - In group chats, incoming messages show the sender's WeChat display name and profile photo when available. Search any conversation's locally synced message history using the magnifying glass.
 - Use the message's `…` menu to copy the original text, quote a message, hide a message in this app, or ask WeChat to recall a message you sent. WeChat determines recall eligibility.
 - In a group, type `@` and choose a member to send a WeChat mention. Use the `…` button to view members and invite contacts. In a direct chat, use `…` to refresh the contact name from WeChat or set a display nickname for this app.
@@ -16,7 +16,7 @@ An independent macOS client for WeChat with built-in translation. It connects th
 
 ## Build on macOS
 
-Version 0.2.4 targets Apple Silicon and macOS 15 or later. Install the Xcode command-line tools and obtain the Apple Silicon `wx` binary from [Agent WeChat v2.3.0](https://github.com/thisnick/agent-wechat/releases/tag/v2.3.0). Follow the upstream [binary verification instructions](https://thisnick.github.io/agent-wechat/setup/install/) and make the downloaded file executable. From this directory run:
+Version 0.2.5 targets Apple Silicon and macOS 15 or later. Install the Xcode command-line tools and obtain the Apple Silicon `wx` binary from [Agent WeChat v2.3.0](https://github.com/thisnick/agent-wechat/releases/tag/v2.3.0). Follow the upstream [binary verification instructions](https://thisnick.github.io/agent-wechat/setup/install/) and make the downloaded file executable. From this directory run:
 
 ```sh
 bash build.sh /absolute/path/to/wx-v2.3.0-darwin-arm64

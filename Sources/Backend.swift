@@ -4,20 +4,32 @@ import UniformTypeIdentifiers
 struct Page<Item: Decodable>: Decodable { let items: [Item]; let nextCursor: String? }
 struct Account: Decodable { let id: String; let authenticated: Bool? }
 struct RoomAvatarMember: Decodable, Identifiable, Equatable { let id: String }
+struct RoomMessageSummary: Decodable, Equatable {
+    let id: String
+    let text: String
+    let createdAt: String?
+    let direction: String?
+    let senderName: String?
+
+    var date: Date? { messageDate(createdAt) }
+}
+
 struct Room: Decodable, Identifiable, Equatable {
     let id: String
     let displayName: String?
     let unreadCount: Int?
     let readStateVersion: String?
     let avatarMembers: [RoomAvatarMember]?
+    let lastMessage: RoomMessageSummary?
 
     init(id: String, displayName: String?, unreadCount: Int?, readStateVersion: String? = nil,
-         avatarMembers: [RoomAvatarMember]? = nil) {
+         avatarMembers: [RoomAvatarMember]? = nil, lastMessage: RoomMessageSummary? = nil) {
         self.id = id
         self.displayName = displayName
         self.unreadCount = unreadCount
         self.readStateVersion = readStateVersion
         self.avatarMembers = avatarMembers
+        self.lastMessage = lastMessage
     }
 
     var isGroup: Bool { id.hasSuffix("@chatroom") }
@@ -35,7 +47,8 @@ struct Room: Decodable, Identifiable, Equatable {
     }
 
     func withName(_ name: String) -> Room {
-        Room(id: id, displayName: name, unreadCount: unreadCount, readStateVersion: readStateVersion, avatarMembers: avatarMembers)
+        Room(id: id, displayName: name, unreadCount: unreadCount, readStateVersion: readStateVersion,
+             avatarMembers: avatarMembers, lastMessage: lastMessage)
     }
 }
 struct Contact: Decodable, Identifiable, Equatable {
@@ -81,11 +94,7 @@ struct Message: Decodable, Identifiable, Equatable {
     let recall: Recall?
     let quote: Quote?
     var outgoing: Bool { direction == "outgoing" }
-    var date: Date? {
-        guard let createdAt else { return nil }
-        return (try? Date(createdAt, strategy: .iso8601))
-            ?? (try? Date(createdAt, strategy: .iso8601.time(includingFractionalSeconds: true)))
-    }
+    var date: Date? { messageDate(createdAt) }
     var hasSender: Bool { type < 10000 && (direction == "incoming" || senderId != nil) }
     var isRecalled: Bool { recall != nil }
     var confirmedServerID: String? {
@@ -113,6 +122,12 @@ struct Message: Decodable, Identifiable, Equatable {
         default: nil
         }
     }
+}
+
+private func messageDate(_ timestamp: String?) -> Date? {
+    guard let timestamp else { return nil }
+    return (try? Date(timestamp, strategy: .iso8601))
+        ?? (try? Date(timestamp, strategy: .iso8601.time(includingFractionalSeconds: true)))
 }
 struct Operation: Decodable {
     struct Result: Decodable {

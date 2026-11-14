@@ -264,7 +264,8 @@ final class ChatModel: ObservableObject {
     func listing(_ filter: RoomFilter) -> [Room] {
         switch filter {
         case .chats:
-            let names = Dictionary(uniqueKeysWithValues: (groups + contacts).compactMap { room in room.name.map { (room.id, $0) } })
+            let names = Dictionary((groups + contacts).compactMap { room in room.name.map { (room.id, $0) } },
+                                   uniquingKeysWith: { first, _ in first })
             return rooms.map { room in
                 guard let name = displayNames[room.id] ?? wechatContactNames[room.id] ?? names[room.id] else { return room }
                 return room.withName(name)
@@ -272,9 +273,10 @@ final class ChatModel: ObservableObject {
         case .groups: return groups.map(applyDisplayName)
         case .contacts: return contacts.map(applyDisplayName)
         case .all:
-            var seen: Set<String> = []
-            let combined = (listing(.chats) + listing(.groups) + listing(.contacts)).filter { seen.insert($0.id).inserted }
-            return combined.filter { !$0.isGroup || $0.name != nil } + combined.filter { $0.isGroup && $0.name == nil }
+            let chats = listing(.chats)
+            var seen = Set(chats.map(\.id))
+            let directory = (listing(.groups) + listing(.contacts)).filter { seen.insert($0.id).inserted }
+            return chats + directory.filter { !$0.isGroup || $0.name != nil } + directory.filter { $0.isGroup && $0.name == nil }
         }
     }
 
@@ -403,6 +405,12 @@ final class ChatModel: ObservableObject {
         let hidden = account.flatMap { hiddenMessageIDs[$0.id] } ?? []
         let recent = selection == room ? messages : messageCache[room] ?? []
         return recent.last { !hidden.contains($0.id) }
+    }
+
+    func latestSummary(for room: Room) -> RoomMessageSummary? {
+        guard let summary = room.lastMessage else { return nil }
+        let hidden = account.flatMap { hiddenMessageIDs[$0.id] } ?? []
+        return hidden.contains(summary.id) ? nil : summary
     }
 
     private func warmRecentHistory(_ account: String) {
@@ -1012,8 +1020,10 @@ final class ChatModel: ObservableObject {
     }
 
     func isRecalled(_ message: Message) -> Bool {
-        message.isRecalled || confirmedRecalls.contains(message.id)
+        message.isRecalled || isRecalledMessage(id: message.id)
     }
+
+    func isRecalledMessage(id: String) -> Bool { confirmedRecalls.contains(id) }
 
     func searchMessages(in room: String, query: String, cursor: String?) async throws -> Page<Message> {
         guard let account, selection == room else { throw CancellationError() }
@@ -1321,10 +1331,10 @@ struct ChatView: View {
             }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 3) {
+                    ForEach(matches) { room in roomButton(room) }
                     if search.isEmpty, filter == .all || filter == .chats, !listed.contains(where: { $0.id == "filehelper" }) {
                         roomButton(Room(id: "filehelper", displayName: nil, unreadCount: nil))
                     }
-                    ForEach(matches) { room in roomButton(room) }
                 }
             }
         }
@@ -1705,20 +1715,22 @@ struct ChatView: View {
         let members = model.groupAvatarMembers[room.id] ?? []
         let photoCount = members.filter { model.avatarImages[$0] != nil }.count
         let title = room.title(in: language)
-        let latest = model.latestMessage(in: room.id)
+        let summary = model.latestSummary(for: room)
+        let latest = summary == nil ? model.latestMessage(in: room.id) : nil
+        let preview = summary.map { summaryPreview($0, in: room) } ?? latest.map { quotePreview($0, in: room.id) }
         let unread = model.unreadCount(for: room)
         return Button { model.select(room.id) } label: {
             HStack(spacing: 9) {
                 avatar(for: room)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                    if let latest {
-                        Text(quotePreview(latest, in: room.id)).font(.caption)
+                    if let preview {
+                        Text(preview).font(.caption)
                             .foregroundStyle(.secondary).lineLimit(1)
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 VStack(alignment: .trailing, spacing: 5) {
-                    if let date = latest?.date {
+                    if let date = summary?.date ?? latest?.date {
                         Text(date, format: .dateTime.hour().minute().locale(Locale(identifier: language.rawValue)))
                             .font(.caption2).foregroundStyle(.secondary).fixedSize()
                     }
@@ -1823,6 +1835,12 @@ struct ChatView: View {
         let author = message.outgoing ? language.label("나")
             : room.hasSuffix("@chatroom") ? model.groupSenderName(message.senderId, in: room) : nil
         return author.map { "\($0) · \(body)" } ?? body
+    }
+
+    private func summaryPreview(_ summary: RoomMessageSummary, in room: Room) -> String {
+        if model.isRecalledMessage(id: summary.id) { return language.label("회수된 메시지") }
+        let author = summary.direction == "outgoing" ? language.label("나") : room.isGroup ? summary.senderName : nil
+        return author.map { "\($0) · \(summary.text)" } ?? summary.text
     }
 
     private func messageContent(_ message: Message, recalled: Bool) -> some View {
