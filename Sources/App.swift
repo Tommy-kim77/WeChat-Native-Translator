@@ -1208,6 +1208,18 @@ final class ChatModel: ObservableObject {
     }
 }
 
+private struct MessageScrollGeometry: Equatable {
+    let contentHeight: CGFloat
+    let viewportHeight: CGFloat
+    let isNearBottom: Bool
+
+    init(_ geometry: ScrollGeometry) {
+        contentHeight = geometry.contentSize.height
+        viewportHeight = geometry.containerSize.height
+        isNearBottom = contentHeight + geometry.contentInsets.bottom - geometry.visibleRect.maxY <= 24
+    }
+}
+
 struct ChatView: View {
     @ObservedObject var model: ChatModel
     @State private var loginTask: Task<Void, Never>?
@@ -1505,12 +1517,18 @@ struct ChatView: View {
                                 bubble(message, in: selected)
                             }
                         }
-                        Color.clear.frame(height: 1).id("latest")
+                        Color.clear.frame(height: 8).id("latest")
                     }
                     .padding(.horizontal, 18).padding(.top, 14)
                 }
                 .onAppear { scroller.scrollTo("latest", anchor: .bottom) }
                 .onChange(of: model.messages.last?.id) { _, _ in scroller.scrollTo("latest", anchor: .bottom) }
+                .onScrollGeometryChange(for: MessageScrollGeometry.self) { MessageScrollGeometry($0) } action: { previous, current in
+                    if previous.isNearBottom,
+                       previous.contentHeight != current.contentHeight || previous.viewportHeight != current.viewportHeight {
+                        scroller.scrollTo("latest", anchor: .bottom)
+                    }
+                }
             }
             if let room = selected?.id { composer(room) }
             HStack {
