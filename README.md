@@ -32,7 +32,7 @@ Windows 릴리스 페이지의 **Assets**에서도 동일한 EXE를 받을 수 �
 
 ## Build on macOS
 
-Version 0.2.6 targets Apple Silicon and macOS 15 or later. Install the Xcode command-line tools and obtain the Apple Silicon `wx` binary from [Agent WeChat v2.3.0](https://github.com/thisnick/agent-wechat/releases/tag/v2.3.0). Follow the upstream [binary verification instructions](https://thisnick.github.io/agent-wechat/setup/install/) and make the downloaded file executable. From this directory run:
+Version 0.2.7 targets Apple Silicon and macOS 15 or later. Install the Xcode command-line tools and obtain the Apple Silicon `wx` binary from [Agent WeChat v2.3.0](https://github.com/thisnick/agent-wechat/releases/tag/v2.3.0). Follow the upstream [binary verification instructions](https://thisnick.github.io/agent-wechat/setup/install/) and make the downloaded file executable. From this directory run:
 
 ```sh
 bash build.sh /absolute/path/to/wx-v2.3.0-darwin-arm64
@@ -55,6 +55,8 @@ This branch contains the macOS source. The Windows source is published on its ow
 대화 상단의 **자동 번역** 메뉴에서 번역 언어를 선택하고 자동 번역을 켜거나 끌 수 있습니다. 자동 번역이 꺼져 있고 미리보기가 없으면 Enter로 원문을 바로 보냅니다. 입력란의 번역 아이콘을 누르면 수동으로 미리보기를 만들 수 있습니다.
 
 대화방을 우클릭해 **대화 목록에서 삭제**를 선택하면 이 앱의 목록에서 숨겨집니다. 왼쪽의 **삭제한 대화방**에서 방별로 복원할 수 있으며, 대화 기록은 보관됩니다.
+
+Mac 창의 빨간 닫기 버튼은 창을 Dock으로 최소화합니다. 앱을 종료하려면 **⌘Q**를 누르세요.
 
 그룹에서 받은 메시지 위에 보낸 사람 이름과 프로필 사진을 표시합니다. 돋보기로 이 기기에 동기화된 대화 기록을 검색할 수 있습니다. 말풍선 옆 `…` 메뉴에서 복사, 인용 답장, 이 앱에서 숨기기를 사용할 수 있습니다. 내가 보낸 메시지는 위챗이 허용하는 경우 상대방 화면에서도 회수할 수 있습니다.
 

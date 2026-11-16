@@ -1982,7 +1982,24 @@ struct NativeTranslatorApp: App {
     private let title = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "WeChat Native Translator"
 
     var body: some Scene {
-        Window(title, id: "wechat-native-translator") { ChatView(model: model) }
-            .defaultSize(width: 1100, height: 740)
+        Window(title, id: "wechat-native-translator") {
+            ChatView(model: model)
+                .background(MinimizeOnClose())
+        }
+        .defaultSize(width: 1100, height: 740)
+    }
+}
+
+private struct MinimizeOnClose: NSViewRepresentable {
+    func makeNSView(context: Context) -> WindowView { WindowView() }
+    func updateNSView(_ view: WindowView, context: Context) {}
+
+    final class WindowView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window, let closeButton = window.standardWindowButton(.closeButton) else { return }
+            closeButton.target = window
+            closeButton.action = #selector(NSWindow.miniaturize(_:))
+        }
     }
 }

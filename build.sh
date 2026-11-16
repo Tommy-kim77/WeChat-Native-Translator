@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 project_dir=$(pwd -P)
-version=0.2.6
+version=0.2.7
 engine=${1:-"$project_dir/Dependencies/wx"}
 output=${2:-"$project_dir/Releases/WeChat-Native-Translator-v$version-macOS.zip"}
 if [[ $# -gt 2 || ! -x "$engine" ]]; then
@@ -36,7 +36,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <key>CFBundleExecutable</key><string>WeChatNativeTranslator</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>$version</string>
-<key>CFBundleVersion</key><string>17</string>
+<key>CFBundleVersion</key><string>18</string>
 <key>CFBundleDevelopmentRegion</key><string>en</string>
 <key>CFBundleLocalizations</key><array><string>en</string><string>ko</string><string>zh-Hans</string></array>
 <key>LSMinimumSystemVersion</key><string>15.0</string>
