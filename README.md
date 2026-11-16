@@ -32,7 +32,7 @@ Windows 릴리스 페이지의 **Assets**에서도 동일한 EXE를 받을 수 �
 
 ## Build on macOS
 
-Version 0.2.7 targets Apple Silicon and macOS 15 or later. Install the Xcode command-line tools and obtain the Apple Silicon `wx` binary from [Agent WeChat v2.3.0](https://github.com/thisnick/agent-wechat/releases/tag/v2.3.0). Follow the upstream [binary verification instructions](https://thisnick.github.io/agent-wechat/setup/install/) and make the downloaded file executable. From this directory run:
+Version 0.2.8 targets Apple Silicon and macOS 15 or later. Install the Xcode command-line tools and obtain the Apple Silicon `wx` binary from [Agent WeChat v2.3.0](https://github.com/thisnick/agent-wechat/releases/tag/v2.3.0). Follow the upstream [binary verification instructions](https://thisnick.github.io/agent-wechat/setup/install/) and make the downloaded file executable. From this directory run:
 
 ```sh
 bash build.sh /absolute/path/to/wx-v2.3.0-darwin-arm64
@@ -53,6 +53,8 @@ This branch contains the macOS source. The Windows source is published on its ow
 현재 버전은 Apple Silicon 맥과 macOS 15 이상용입니다. 빌드에는 Xcode 명령줄 도구와 위에서 안내한 Agent WeChat `wx` 실행 파일이 필요합니다.
 
 대화 상단의 **자동 번역** 메뉴에서 번역 언어를 선택하고 자동 번역을 켜거나 끌 수 있습니다. 자동 번역이 꺼져 있고 미리보기가 없으면 Enter로 원문을 바로 보냅니다. 입력란의 번역 아이콘을 누르면 수동으로 미리보기를 만들 수 있습니다.
+
+웹 주소만 입력하면 자동 번역이 켜져 있어도 Enter로 바로 보냅니다. 문장에 웹 주소가 섞여 있으면 주소를 그대로 두고 문장을 번역합니다.
 
 대화방을 우클릭해 **대화 목록에서 삭제**를 선택하면 이 앱의 목록에서 숨겨집니다. 왼쪽의 **삭제한 대화방**에서 방별로 복원할 수 있으며, 대화 기록은 보관됩니다.
 

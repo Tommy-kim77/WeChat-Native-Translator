@@ -118,6 +118,10 @@ final class ChatModel: ObservableObject {
         let text = (confirmedPreview ?? composerDraft).text
         return !sending && !translating && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    var shouldTranslateOnEnter: Bool {
+        confirmedPreview == nil && automaticTranslationEnabled && !composerDraft.isWebLinkOnly
+    }
     @Published var config: TranslationSession.Configuration?
     @Published var translating = false
     @Published private(set) var translationProvider: TranslationProvider
@@ -938,7 +942,7 @@ final class ChatModel: ObservableObject {
         let prose = content.prose
         let mixed = MixedLanguageText(prose) != nil
         let code = NLLanguageRecognizer.dominantLanguage(for: prose)?.rawValue
-        if prose.isEmpty || (!mixed && code?.split(separator: "-").first == target.rawValue.split(separator: "-").first) {
+        if !prose.contains(where: \.isLetter) || (!mixed && code?.split(separator: "-").first == target.rawValue.split(separator: "-").first) {
             accept(content)
             return
         }
@@ -1013,8 +1017,8 @@ final class ChatModel: ObservableObject {
 
     func submitComposer() async {
         guard canSend else { return }
-        if confirmedPreview != nil || !automaticTranslationEnabled { await send() }
-        else { translate(draft) }
+        if shouldTranslateOnEnter { translate(draft) }
+        else { await send() }
     }
 
     func send() async {
@@ -1611,7 +1615,7 @@ struct ChatView: View {
                         .labelStyle(.iconOnly).buttonStyle(MacWeChatIconButton()).help(language.label("멤버 멘션"))
                 }
                 Spacer(minLength: 4)
-                Text(language.label(model.preview == nil && model.automaticTranslationEnabled
+                Text(language.label(model.shouldTranslateOnEnter
                                     ? "Enter: 번역 · Shift+Enter: 줄바꿈" : "Enter: 전송 · Shift+Enter: 줄바꿈"))
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 Button(language.label("초안 번역"), systemImage: "translate") { model.translate(model.draft) }

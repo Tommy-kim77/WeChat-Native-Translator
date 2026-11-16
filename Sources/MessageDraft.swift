@@ -60,6 +60,7 @@ struct MessageDraft: Equatable {
 
     private(set) var text: String
     private var mentions: [Mention] = []
+    private static let linkDetector = try! NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
 
     init(_ text: String = "") { self.text = text }
 
@@ -95,26 +96,48 @@ struct MessageDraft: Equatable {
         return NSRange(location: range.location, length: length)
     }
 
-    var prose: String {
-        var body = text
-        for mention in mentions.reversed() {
-            if let range = Range(mention.range, in: body) { body.replaceSubrange(range, with: " ") }
+    private var translationExclusions: [(range: NSRange, user: String?)] {
+        var exclusions = mentions.map { (range: $0.range, user: Optional($0.user)) }
+        let matches = Self.linkDetector.matches(in: text, range: NSRange(text.startIndex..., in: text))
+        for match in matches {
+            guard let scheme = match.url?.scheme?.lowercased(), scheme == "http" || scheme == "https",
+                  !mentions.contains(where: { NSIntersectionRange($0.range, match.range).length > 0 }) else { continue }
+            exclusions.append((range: match.range, user: nil))
         }
-        return body.trimmingCharacters(in: .whitespacesAndNewlines)
+        return exclusions.sorted { $0.range.location < $1.range.location }
+    }
+
+    private func textExcluding(_ ranges: [NSRange]) -> String {
+        let body = NSMutableString(string: text)
+        for range in ranges.reversed() { body.replaceCharacters(in: range, with: " ") }
+        return body as String
+    }
+
+    var prose: String {
+        textExcluding(translationExclusions.map(\.range)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var isWebLinkOnly: Bool {
+        let exclusions = translationExclusions
+        return exclusions.contains { $0.user == nil }
+            && !textExcluding(exclusions.map(\.range)).contains(where: \.isLetter)
     }
 
     func translated(using translate: (String) async throws -> String) async throws -> Self {
-        if mentions.isEmpty { return Self(try await translate(text)) }
+        let exclusions = translationExclusions
+        if exclusions.isEmpty { return Self(try await translate(text)) }
         let original = text as NSString
         var result = Self()
         var start = 0
-        for mention in mentions {
-            let segment = original.substring(with: NSRange(location: start, length: mention.range.location - start))
+        for exclusion in exclusions {
+            let segment = original.substring(with: NSRange(location: start, length: exclusion.range.location - start))
             result.text += try await Self.translateSegment(segment, using: translate)
             let position = result.text.utf16.count
-            result.text += original.substring(with: mention.range)
-            result.mentions.append(Mention(user: mention.user, range: NSRange(location: position, length: mention.range.length)))
-            start = NSMaxRange(mention.range)
+            result.text += original.substring(with: exclusion.range)
+            if let user = exclusion.user {
+                result.mentions.append(Mention(user: user, range: NSRange(location: position, length: exclusion.range.length)))
+            }
+            start = NSMaxRange(exclusion.range)
         }
         result.text += try await Self.translateSegment(original.substring(from: start), using: translate)
         return result
@@ -122,7 +145,7 @@ struct MessageDraft: Equatable {
 
     private static func translateSegment(_ text: String, using translate: (String) async throws -> String) async throws -> String {
         let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !body.isEmpty, let range = text.range(of: body) else { return text }
+        guard body.contains(where: \.isLetter), let range = text.range(of: body) else { return text }
         let translated = try await translate(body).trimmingCharacters(in: .whitespacesAndNewlines)
         return String(text[..<range.lowerBound]) + translated + String(text[range.upperBound...])
     }
