@@ -9,6 +9,12 @@
 "휴대폰 위챗으로 이 QR을 스캔하세요." = "Scan this QR code with WeChat on your phone.";
 "QR 로그인 시간이 지났습니다. 다시 로그인해 주세요." = "The sign-in code expired. Try signing in again.";
 "로그인 취소됨" = "Sign-in canceled";
+"대화 목록에서 삭제" = "Remove from chat list";
+"삭제한 대화방" = "Removed chats";
+"복원" = "Restore";
+"%@ 복원" = "Restore %@";
+"대화방을 목록에서 삭제했습니다. 대화 기록은 보관됩니다." = "Removed from the chat list. Chat history is kept.";
+"대화방을 목록에 복원했습니다." = "Restored to the chat list.";
 "그룹·연락처 목록 읽기 실패" = "Could not load groups and contacts.";
 "위챗에서 그룹과 연락처 이름을 확인 중…" = "Checking group and contact names in WeChat…";
 "일부 그룹 또는 연락처 이름을 새로 읽지 못했습니다." = "Some group or contact names could not be refreshed.";

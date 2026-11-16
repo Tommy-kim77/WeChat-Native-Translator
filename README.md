@@ -24,6 +24,7 @@ Windows 릴리스 페이지의 **Assets**에서도 동일한 EXE를 받을 수 �
 - Apple Translation is the default and needs no API key. To use DeepL, choose it in Language settings and verify your own [DeepL API key](https://developers.deepl.com/docs/getting-started/auth). The app stores the key in macOS Keychain. DeepL receives the text it translates, and those requests count toward your DeepL API usage.
 - Open the translation menu in the chat header to choose languages or toggle automatic translation. When it is on, Enter previews the outgoing translation. Edit the preview if needed, then press Enter or click Send. When it is off and there is no preview, Enter sends the draft directly. The translation button can still create a preview. Use Shift+Enter for a new line.
 - Browse chats in the order provided by the local WeChat engine, with conversation names, latest-message previews, contact photos and group avatars. In All, directory entries without a synced chat appear below the chats.
+- Right-click a chat to remove it from the app's list. Use Removed chats in the sidebar to restore a chat. Chat history is kept.
 - In group chats, incoming messages show the sender's WeChat display name and profile photo when available. Search any conversation's locally synced message history using the magnifying glass.
 - Use the message's `…` menu to copy the original text, quote a message, hide a message in this app, or ask WeChat to recall a message you sent. WeChat determines recall eligibility.
 - In a group, type `@` and choose a member to send a WeChat mention. Use the `…` button to view members and invite contacts. In a direct chat, use `…` to refresh the contact name from WeChat or set a display nickname for this app.
@@ -31,7 +32,7 @@ Windows 릴리스 페이지의 **Assets**에서도 동일한 EXE를 받을 수 �
 
 ## Build on macOS
 
-Version 0.2.5 targets Apple Silicon and macOS 15 or later. Install the Xcode command-line tools and obtain the Apple Silicon `wx` binary from [Agent WeChat v2.3.0](https://github.com/thisnick/agent-wechat/releases/tag/v2.3.0). Follow the upstream [binary verification instructions](https://thisnick.github.io/agent-wechat/setup/install/) and make the downloaded file executable. From this directory run:
+Version 0.2.6 targets Apple Silicon and macOS 15 or later. Install the Xcode command-line tools and obtain the Apple Silicon `wx` binary from [Agent WeChat v2.3.0](https://github.com/thisnick/agent-wechat/releases/tag/v2.3.0). Follow the upstream [binary verification instructions](https://thisnick.github.io/agent-wechat/setup/install/) and make the downloaded file executable. From this directory run:
 
 ```sh
 bash build.sh /absolute/path/to/wx-v2.3.0-darwin-arm64
@@ -52,6 +53,8 @@ This branch contains the macOS source. The Windows source is published on its ow
 현재 버전은 Apple Silicon 맥과 macOS 15 이상용입니다. 빌드에는 Xcode 명령줄 도구와 위에서 안내한 Agent WeChat `wx` 실행 파일이 필요합니다.
 
 대화 상단의 **자동 번역** 메뉴에서 번역 언어를 선택하고 자동 번역을 켜거나 끌 수 있습니다. 자동 번역이 꺼져 있고 미리보기가 없으면 Enter로 원문을 바로 보냅니다. 입력란의 번역 아이콘을 누르면 수동으로 미리보기를 만들 수 있습니다.
+
+대화방을 우클릭해 **대화 목록에서 삭제**를 선택하면 이 앱의 목록에서 숨겨집니다. 왼쪽의 **삭제한 대화방**에서 방별로 복원할 수 있으며, 대화 기록은 보관됩니다.
 
 그룹에서 받은 메시지 위에 보낸 사람 이름과 프로필 사진을 표시합니다. 돋보기로 이 기기에 동기화된 대화 기록을 검색할 수 있습니다. 말풍선 옆 `…` 메뉴에서 복사, 인용 답장, 이 앱에서 숨기기를 사용할 수 있습니다. 내가 보낸 메시지는 위챗이 허용하는 경우 상대방 화면에서도 회수할 수 있습니다.
 

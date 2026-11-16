@@ -59,6 +59,7 @@ final class ChatModel: ObservableObject {
     @Published var selection: String?
     @Published var messages: [Message] = []
     @Published private var hiddenMessageIDs: [String: [String]]
+    @Published private var removedRoomNamesByAccount: [String: [String: String]]
     @Published private var confirmedRecalls: Set<String> = []
     @Published private(set) var pendingRecalls: Set<String> = []
     @Published private var quotedMessages: [String: Message] = [:]
@@ -167,6 +168,7 @@ final class ChatModel: ObservableObject {
     init(preferences: UserDefaults = .standard, preferredLanguages: [String] = Locale.preferredLanguages) {
         self.preferences = preferences
         self.hiddenMessageIDs = preferences.object(forKey: "hiddenMessageIDs") as? [String: [String]] ?? [:]
+        self.removedRoomNamesByAccount = preferences.object(forKey: "removedRoomNamesByAccount") as? [String: [String: String]] ?? [:]
         let system = Language.preferred(from: preferredLanguages)
         self.systemLanguage = system
         self.interfacePreference = preferences.string(forKey: "interfaceLanguage").flatMap(Language.init(rawValue:))
@@ -266,12 +268,12 @@ final class ChatModel: ObservableObject {
         case .chats:
             let names = Dictionary((groups + contacts).compactMap { room in room.name.map { (room.id, $0) } },
                                    uniquingKeysWith: { first, _ in first })
-            return rooms.map { room in
+            return rooms.filter { !isRoomRemoved($0.id) }.map { room in
                 guard let name = displayNames[room.id] ?? wechatContactNames[room.id] ?? names[room.id] else { return room }
                 return room.withName(name)
             }
-        case .groups: return groups.map(applyDisplayName)
-        case .contacts: return contacts.map(applyDisplayName)
+        case .groups: return groups.filter { !isRoomRemoved($0.id) }.map(applyDisplayName)
+        case .contacts: return contacts.filter { !isRoomRemoved($0.id) }.map(applyDisplayName)
         case .all:
             let chats = listing(.chats)
             var seen = Set(chats.map(\.id))
@@ -282,6 +284,40 @@ final class ChatModel: ObservableObject {
 
     private func applyDisplayName(_ room: Room) -> Room {
         (displayNames[room.id] ?? wechatContactNames[room.id]).map(room.withName) ?? room
+    }
+
+    private var removedRoomNames: [String: String] {
+        guard let account else { return [:] }
+        return removedRoomNamesByAccount[account.id] ?? [:]
+    }
+
+    var removedRooms: [Room] {
+        removedRoomNames.map { Room(id: $0.key, displayName: $0.value, unreadCount: nil) }
+            .sorted { first, second in
+                let order = first.title(in: interfaceLanguage).localizedStandardCompare(second.title(in: interfaceLanguage))
+                return order == .orderedSame ? first.id < second.id : order == .orderedAscending
+            }
+    }
+
+    func isRoomRemoved(_ id: String) -> Bool { removedRoomNames[id] != nil }
+
+    func canRemoveRoom(_ id: String) -> Bool {
+        account != nil && !sending && !sendingFiles.contains(id) && !isRoomRemoved(id)
+    }
+
+    func removeRoomFromList(_ room: Room) {
+        guard let account, canRemoveRoom(room.id) else { return }
+        removedRoomNamesByAccount[account.id, default: [:]][room.id] = room.name ?? ""
+        preferences.set(removedRoomNamesByAccount, forKey: "removedRoomNamesByAccount")
+        if selection == room.id { select(nil) }
+        status = UIMessage("대화방을 목록에서 삭제했습니다. 대화 기록은 보관됩니다.")
+    }
+
+    func restoreRoomToList(_ id: String) {
+        guard let account, isRoomRemoved(id) else { return }
+        removedRoomNamesByAccount[account.id]?.removeValue(forKey: id)
+        preferences.set(removedRoomNamesByAccount, forKey: "removedRoomNamesByAccount")
+        status = UIMessage("대화방을 목록에 복원했습니다.")
     }
 
     func refreshContactName(_ room: Room) async {
@@ -415,7 +451,7 @@ final class ChatModel: ObservableObject {
 
     private func warmRecentHistory(_ account: String) {
         guard warmingHistory == nil, Date().timeIntervalSince(lastRoomSwitch) >= 5 else { return }
-        let targets = rooms.prefix(6).filter { $0.id != selection && messageCache[$0.id] == nil }
+        let targets = rooms.prefix(6).filter { $0.id != selection && !isRoomRemoved($0.id) && messageCache[$0.id] == nil }
         guard !targets.isEmpty else { return }
         warmingHistory = Task {
             defer { warmingHistory = nil }
@@ -852,18 +888,20 @@ final class ChatModel: ObservableObject {
         return detected == nil || detected == .english || text.split(whereSeparator: \.isWhitespace).count <= 3 ? "en" : nil
     }
 
-    func select(_ room: String) {
+    func select(_ room: String?) {
         guard room != selection, !sending else { return }
+        if let room, isRoomRemoved(room) { return }
         if let selection { drafts[selection] = composerDraft }
         lastRoomSwitch = Date()
         warmingHistory?.cancel()
         selection = room
-        composerDraft = drafts[room] ?? MessageDraft()
-        messages = messageCache[room] ?? []
-        loadingMessages = messageCache[room] == nil
+        composerDraft = room.flatMap { drafts[$0] } ?? MessageDraft()
+        let cachedMessages = room.flatMap { messageCache[$0] }
+        messages = cachedMessages ?? []
+        loadingMessages = room != nil && cachedMessages == nil
         refreshMessageTranslations()
         previewDraft = nil
-        if let account, room.hasSuffix("@chatroom"), listing(.all).first(where: { $0.id == room })?.name == nil,
+        if let account, let room, room.hasSuffix("@chatroom"), listing(.all).first(where: { $0.id == room })?.name == nil,
            requestedGroupNames.insert(room).inserted {
             Task { await fetchGroupName(room, account: account.id) }
         }
@@ -1173,6 +1211,7 @@ struct ChatView: View {
     @State private var editingName = ""
     @State private var showingNameEditor = false
     @State private var showingLanguageSettings = false
+    @State private var showingRemovedRooms = false
     @State private var showingTranslationOptions = false
     @State private var deepLKeyInput = ""
     @State private var showingChatInfo = false
@@ -1329,10 +1368,12 @@ struct ChatView: View {
             if let status = model.directoryStatus {
                 Text(status.text(in: language)).font(.caption).foregroundStyle(.secondary)
             }
+            if !model.removedRooms.isEmpty { removedRoomsButton }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 3) {
                     ForEach(matches) { room in roomButton(room) }
-                    if search.isEmpty, filter == .all || filter == .chats, !listed.contains(where: { $0.id == "filehelper" }) {
+                    if search.isEmpty, filter == .all || filter == .chats, !model.isRoomRemoved("filehelper"),
+                       !listed.contains(where: { $0.id == "filehelper" }) {
                         roomButton(Room(id: "filehelper", displayName: nil, unreadCount: nil))
                     }
                 }
@@ -1341,6 +1382,38 @@ struct ChatView: View {
         .padding(12)
         .frame(minWidth: 220, idealWidth: 260, maxWidth: 300)
         .background(MacWeChatStyle.panel)
+    }
+
+    private var removedRoomsButton: some View {
+        Button(language.label("삭제한 대화방"), systemImage: "arrow.uturn.backward") {
+            showingRemovedRooms.toggle()
+        }
+        .buttonStyle(.borderless)
+        .popover(isPresented: $showingRemovedRooms, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(language.label("삭제한 대화방")).font(.headline)
+                ScrollView {
+                    VStack(spacing: 8) {
+                        ForEach(model.removedRooms) { room in
+                            let title = room.title(in: language)
+                            HStack {
+                                Text(title).lineLimit(2)
+                                Spacer()
+                                Button(language.label("복원")) {
+                                    model.restoreRoomToList(room.id)
+                                    if model.removedRooms.isEmpty { showingRemovedRooms = false }
+                                }
+                                .accessibilityLabel(language.label("%@ 복원", title))
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+                .frame(height: min(250, CGFloat(model.removedRooms.count) * 40))
+            }
+            .padding(14)
+            .frame(width: 300)
+        }
     }
 
     private var translationControl: some View {
@@ -1760,6 +1833,10 @@ struct ChatView: View {
                     beginNameEdit(room)
                 }
             }
+            Button(role: .destructive) { model.removeRoomFromList(room) } label: {
+                Label(language.label("대화 목록에서 삭제"), systemImage: "trash")
+            }
+            .disabled(!model.canRemoveRoom(room.id))
         }
     }
 
