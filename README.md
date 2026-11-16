@@ -32,7 +32,7 @@ Windows 릴리스 페이지의 **Assets**에서도 동일한 EXE를 받을 수 �
 
 ## Build on macOS
 
-Version 0.2.8 targets Apple Silicon and macOS 15 or later. Install the Xcode command-line tools and obtain the Apple Silicon `wx` binary from [Agent WeChat v2.3.0](https://github.com/thisnick/agent-wechat/releases/tag/v2.3.0). Follow the upstream [binary verification instructions](https://thisnick.github.io/agent-wechat/setup/install/) and make the downloaded file executable. From this directory run:
+Version 0.2.9 targets Apple Silicon and macOS 15 or later. Install the Xcode command-line tools and obtain the Apple Silicon `wx` binary from [Agent WeChat v2.3.0](https://github.com/thisnick/agent-wechat/releases/tag/v2.3.0). Follow the upstream [binary verification instructions](https://thisnick.github.io/agent-wechat/setup/install/) and make the downloaded file executable. From this directory run:
 
 ```sh
 bash build.sh /absolute/path/to/wx-v2.3.0-darwin-arm64

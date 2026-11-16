@@ -941,7 +941,9 @@ final class ChatModel: ObservableObject {
         work = (id, content, message, selection, target)
         let prose = content.prose
         let mixed = MixedLanguageText(prose) != nil
-        let code = NLLanguageRecognizer.dominantLanguage(for: prose)?.rawValue
+        let korean = Language.korean.rawValue
+        // A short Korean sentence with a Latin term can be misidentified as a European language.
+        let code = Self.nameSource(prose) == korean ? korean : NLLanguageRecognizer.dominantLanguage(for: prose)?.rawValue
         if !prose.contains(where: \.isLetter) || (!mixed && code?.split(separator: "-").first == target.rawValue.split(separator: "-").first) {
             accept(content)
             return
