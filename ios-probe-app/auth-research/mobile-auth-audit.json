@@ -1,0 +1,32 @@
+{
+  "assessment": "offline_research_only",
+  "server_login_performed": false,
+  "password_sms_feature_enabled": false,
+  "checks": {
+    "go_password_manual_auth_request": true,
+    "go_password_depends_on_ccdata": true,
+    "go_password_hash_source": true,
+    "go_sms_is_secondary_to_password": true,
+    "go_sms_apply_verify_defined": true,
+    "go_v08_requires_external_dll_or_so": true,
+    "go_v08_unsupported_on_darwin": true,
+    "go_crypto_depends_on_v08": true,
+    "ios_qr_secmanualauth_present": true,
+    "ios_existing_pc_identity": true,
+    "ios_password_sms_auth_verified": false
+  },
+  "findings": [
+    "A third-party Go source contains a manual-auth protobuf shape and a password hash.",
+    "SMS appears in the source as a SECOND FACTOR after manual password authentication.",
+    "The v08 device-security component depends on a nonportable external library.",
+    "The existing iOS engine uses approved QR/manual-auth and a desktop PC identity.",
+    "No verified, complete, first-party-compatible mobile password/SMS flow is available."
+  ],
+  "next_validation_requirements": [
+    "Independent reproducible iOS-compatible device-security generation",
+    "Offline golden tests for request and response encoding",
+    "Explicit challenge-state and error-handling tests",
+    "Confirmed mobile credential-to-session derivation",
+    "Only then an opt-in test on device with secrets held locally"
+  ]
+}

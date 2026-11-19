@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
+  "packages": [
+    "github:NixOS/nixpkgs/nixos-26.05#nodejs_24",
+    "pnpm",
+    "colima",
+    "direnv@latest",
+    "rustup",
+    "cargo-watch",
+    "sqlcipher",
+    "cmake@latest"
+  ],
+  "shell": {
+    "init_hook": [
+      "if [ \"$(uname -s)\" = Darwin ] && [ -z \"${DOCKER_HOST:-}\" ]; then export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock; fi",
+      "if ! rustup show active-toolchain &>/dev/null; then rustup default stable &>/dev/null; fi",
+      "export PATH=\"$HOME/.cargo/bin:$PATH\""
+    ],
+    "scripts": {
+      "colima:start": [
+        "colima start"
+      ],
+      "colima:stop": [
+        "colima stop"
+      ],
+      "test": [
+        "echo \"Error: no test specified\" && exit 1"
+      ]
+    }
+  }
+}

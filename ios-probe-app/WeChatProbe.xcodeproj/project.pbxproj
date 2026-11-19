@@ -1,0 +1,29 @@
+// !$*UTF8*$!
+{
+ archiveVersion = 1;
+ classes = {};
+ objectVersion = 56;
+ objects = {
+  A00000000000000000000001 = {isa = PBXProject; buildConfigurationList = A00000000000000000000002; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; mainGroup = A00000000000000000000003; productRefGroup = A00000000000000000000004; projectDirPath = ""; projectRoot = ""; targets = (A00000000000000000000005,); };
+  A00000000000000000000002 = {isa = XCConfigurationList; buildConfigurations = (A00000000000000000000006,A00000000000000000000007,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Debug; };
+  A00000000000000000000003 = {isa = PBXGroup; children = (A00000000000000000000008,A00000000000000000000004,A0000000000000000000000F,A00000000000000000000011,); sourceTree = "<group>"; };
+  A00000000000000000000004 = {isa = PBXGroup; children = (A00000000000000000000009,); name = Products; sourceTree = "<group>"; };
+  A00000000000000000000005 = {isa = PBXNativeTarget; buildConfigurationList = A0000000000000000000000A; buildPhases = (A0000000000000000000000B,A00000000000000000000013,); buildRules = (); dependencies = (); name = WeChatProbe; productName = WeChatProbe; productReference = A00000000000000000000009; productType = "com.apple.product-type.application"; };
+  A00000000000000000000006 = {isa = XCBuildConfiguration; buildSettings = {SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 18.0; }; name = Debug; };
+  A00000000000000000000007 = {isa = XCBuildConfiguration; buildSettings = {SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 18.0; }; name = Release; };
+  A00000000000000000000008 = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
+  A00000000000000000000009 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WeChatProbe.app; sourceTree = BUILT_PRODUCTS_DIR; };
+  A0000000000000000000000A = {isa = XCConfigurationList; buildConfigurations = (A0000000000000000000000C,A0000000000000000000000D,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Debug; };
+  A0000000000000000000000B = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A0000000000000000000000E,A00000000000000000000010,); runOnlyForDeploymentPostprocessing = 0; };
+  A0000000000000000000000C = {isa = XCBuildConfiguration; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = kr.probedigital.wechatiosprobe; PRODUCT_NAME = "$(TARGET_NAME)"; GENERATE_INFOPLIST_FILE = YES; ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "선택한 사진을 위챗 대화방으로 전송하기 위해 접근합니다."; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = 835D39W7A2; IPHONEOS_DEPLOYMENT_TARGET = 18.0; TARGETED_DEVICE_FAMILY = "1"; OTHER_LDFLAGS = ("$(PROJECT_DIR)/../packages/native-client-rust/target/aarch64-apple-ios/debug/libwechat_protocol.a", "-framework", "UIKit", "-framework", "Foundation", "-framework", "Security", "-framework", "SystemConfiguration", "-framework", "CoreFoundation", "-framework", "CFNetwork", "-framework", "Network", "-framework", "CoreGraphics", "-framework", "ImageIO", "-framework", "CoreImage", "-framework", "AVFoundation", "-framework", "AudioToolbox", "-framework", "CoreMedia", "-framework", "VideoToolbox", "-framework", "Accelerate", "-lresolv", "-liconv", "-lc++", "-lz"); CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0; SWIFT_INSTALL_OBJC_HEADER = YES; CLANG_ENABLE_OBJC_ARC = YES; }; name = Debug; };
+  A0000000000000000000000D = {isa = XCBuildConfiguration; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = kr.probedigital.wechatiosprobe; PRODUCT_NAME = "$(TARGET_NAME)"; GENERATE_INFOPLIST_FILE = YES; ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "선택한 사진을 위챗 대화방으로 전송하기 위해 접근합니다."; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = 835D39W7A2; IPHONEOS_DEPLOYMENT_TARGET = 18.0; TARGETED_DEVICE_FAMILY = "1"; OTHER_LDFLAGS = ("$(PROJECT_DIR)/../packages/native-client-rust/target/aarch64-apple-ios/debug/libwechat_protocol.a", "-framework", "UIKit", "-framework", "Foundation", "-framework", "Security", "-framework", "SystemConfiguration", "-framework", "CoreFoundation", "-framework", "CFNetwork", "-framework", "Network", "-framework", "CoreGraphics", "-framework", "ImageIO", "-framework", "CoreImage", "-framework", "AVFoundation", "-framework", "AudioToolbox", "-framework", "CoreMedia", "-framework", "VideoToolbox", "-framework", "Accelerate", "-lresolv", "-liconv", "-lc++", "-lz"); CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 5.0; SWIFT_INSTALL_OBJC_HEADER = YES; CLANG_ENABLE_OBJC_ARC = YES; }; name = Release; };
+  A0000000000000000000000E = {isa = PBXBuildFile; fileRef = A00000000000000000000008; };
+  A0000000000000000000000F = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationBridge.swift; sourceTree = "<group>"; };
+  A00000000000000000000010 = {isa = PBXBuildFile; fileRef = A0000000000000000000000F; };
+  A00000000000000000000011 = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+  A00000000000000000000012 = {isa = PBXBuildFile; fileRef = A00000000000000000000011; };
+  A00000000000000000000013 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000012,); runOnlyForDeploymentPostprocessing = 0; };
+
+ };
+ rootObject = A00000000000000000000001;
+}

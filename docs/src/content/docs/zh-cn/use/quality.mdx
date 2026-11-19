@@ -1,0 +1,113 @@
+---
+title: 视频与图片画质
+description: 选择图片与视频的发送画质，然后下载可用的副本。
+sourceHash: "36b5ab32930e"
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+在桌面应用和网页客户端、CLI 以及 HTTP API 中，图片默认以**标准**画质发送。OpenClaw 会自动以**原图**画质发送图片。视频默认以普通画质发送。
+
+## 选择发送画质 \{#choose-send-quality}
+
+| 发送 | 接收方可获得的副本 |
+| --- | --- |
+| 图片，`standard`（默认） | 压缩后的 `standard` 与 `thumbnail`；无原图 |
+| 图片，`original` | 全分辨率 `original`，另含 standard 与 thumbnail |
+| 视频，`normal`（默认） | 处理后的播放版与缩略图 |
+| 视频，`original` | 播放版与缩略图，另含未修改的原始视频 |
+| 文件附件 | 未修改的源文件字节 |
+
+**图片：** 原图画质会保留 JPEG 源文件的字节。PNG、GIF 和 WebP 源文件将以全分辨率转换为 JPEG。生成的高清与缩略图副本，其长边起始分别为 640 与 160 像素；处理时会先降低 JPEG 质量，再缩小尺寸，直至每个副本都不超过 65,520 字节。小图不会被放大。
+
+图片源文件的大小上限为 26,214,383 字节。JPEG 允许 6400 万像素，每条边最多 8,192 像素；较大的 RGB 与灰度 JPEG 会以降低分辨率的方式解码，用于生成预览。其他格式允许 16,777,216 像素。若图片更大，或需要保留非 JPEG 的原始字节，请作为文件附件发送。
+
+**视频：** MOV、MP4、3GP、3G2 和 MJ2 源文件最大允许 512 MiB。播放版使用 H.264 Main 配置，长边最多 720 像素，帧率最高 30 fps；若存在音频，则使用 AAC 编码。处理过程绝不会缩短视频时长。容器格式能否支持，取决于其所用的编解码器。
+
+## 从桌面应用或网页客户端发送 \{#send-from-the-desktop-or-web-client}
+
+1. 将图片和视频添加、粘贴或拖放到消息输入框中。
+2. 检查暂存文件下方的**原画质发送**选项。它适用于该条消息中的每张图片和视频；文件始终原样发送。
+3. 点击**发送**。
+
+## 从 CLI 发送 \{#send-from-the-cli}
+
+1. 发送压缩后的图片，或同时附带全分辨率原图：
+
+   ```bash
+   wx messages send filehelper --image ./photo.jpg \
+     --idempotency-key photo-standard --wait 3600
+   wx messages send filehelper --image ./photo.jpg --image-quality original \
+     --idempotency-key photo-original --wait 3600
+   ```
+
+2. 选择视频画质：
+
+   ```bash
+   wx messages send filehelper --video ./clip.mp4 --video-quality normal \
+     --idempotency-key clip-normal --wait 3600
+   wx messages send filehelper --video ./clip.mp4 --video-quality original \
+     --idempotency-key clip-original --wait 3600
+   ```
+
+3. 使用 `wx --json jobs get JOB_ID` 查看返回的任务。发送成功后，结果中会包含以下字段：
+
+   ```json
+   {"state":"accepted","result":{"uploadReadbackVerified":true}}
+   ```
+
+   图片任务还会在 `result` 中报告 `imagePreparation.originalAdvertised` 与 `imagePreparation.sourcePreserved`。
+
+## HTTP API 与 SDK \{#http-api-and-sdk}
+
+[先上传源文件](/use/media/#http-api-and-sdk)，然后向 `POST /sends` 提交请求，并附带 `Idempotency-Key` 请求头：
+
+```json
+{
+  "threadId": "filehelper",
+  "kind": "image",
+  "sourceId": "SOURCE_ID",
+  "imageQuality": "original"
+}
+```
+
+标准图片请省略 `imageQuality`。发送视频时，请使用 `kind: "video"`，并可选择传入 `videoQuality: "original"`。SDK 的 `sendMedia` 接受相同的字段。
+
+可选的 `standardSourceId` 与 `thumbnailSourceId` 可接收单独上传的 JPEG 副本，每个不超过 65,520 字节。省略的副本将自动生成。
+
+## OpenClaw \{#openclaw}
+
+普通消息工具的 `media` 字段会自动以原图画质发送图片。JPEG 保留其源文件字节；其他受支持的图片格式会转换为全分辨率 JPEG。若需以文件附件形式原样发送字节，请使用 `asDocument: true`。
+
+发送原始视频时，请添加：
+
+```json
+{
+  "channelData": {
+    "agent-wechat": { "videoQuality": "original" }
+  }
+}
+```
+
+请将 `mediaMaxMb` 设置得足够大，以容纳源文件。视频画质选项不能与文档模式同时使用。
+
+## 下载副本 \{#download-a-copy}
+
+1. 请求 `best`（默认值）或消息中声明的某个版本：
+
+   ```bash
+   wx messages media CHAT_ID IMAGE_ID --quality standard --output ./standard.jpg
+   wx messages media CHAT_ID IMAGE_ID --quality original --output ./original.jpg
+   ```
+
+   `--cached-only` 会禁止下载。若本地没有缓存副本，则报告 `state: "not_cached"`。
+
+2. 检查返回资源中的 `state` 与 `actualVariant`。请求原图时，不能用预览图替代，也无法恢复发送前已被去除的细节。有关 API 与 SDK 的下载步骤，请参见[媒体](/use/media/)。在 OpenClaw 中，若消息提供了原图，请使用 `wechat_media` 并传入 `quality: "original"`。
+
+<Aside title="使用提示">
+- 新发送的标准图片没有原图下载选项。较早保存的发送记录则保留其最初提供的副本。
+- 原图 JPEG 会保留内嵌的元数据，其中可能包含相机与位置信息。OpenClaw 发送的图片同样如此。
+- 超时后请保留任务 ID。复用发送幂等键却更改画质会产生冲突；请参见[消息发送与恢复机制](/how-it-works/sends/)。
+- 视频播放版必须在 25 MiB 以内，因此带音频的视频长度上限约为 29 分钟。预处理会在五分钟后超时。
+- 下载策略会影响自动缓存；请参见[设置](/use/settings/)。服务端接收与接收方播放是两项独立的检查。
+</Aside>

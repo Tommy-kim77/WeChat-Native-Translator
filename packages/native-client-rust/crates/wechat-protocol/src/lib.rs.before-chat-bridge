@@ -1,0 +1,206 @@
+//! Connect to WeChat, authenticate, synchronize and submit messages with [`NativeClient`].
+//!
+//! Most server operations are **methods on [`NativeClient`]**, rather than free
+//! functions in this crate's Functions list. [`AccountState`] holds accepted
+//! credentials; transfer it once into [`NativeClient::from_account`]. Account
+//! operations then share that owner. It is secret data, not an API access token.
+//!
+//! | Task | Start here |
+//! | --- | --- |
+//! | QR login | [`NativeClient::start_qr_login`], [`NativeClient::poll_login`], [`NativeClient::complete_login`] |
+//! | Receive a sync page | [`NativeClient::sync`], [`wire::decode_add_message`] |
+//! | Send text | [`NativeClient::send_text`], [`TextSendResult`] |
+//! | Contacts and rooms | [`NativeClient::lookup_contacts`], [`NativeClient::lookup_room`] |
+//! | Attachments | [`media`], [`media_send`], [`NativeClient::send_file`] |
+//! | Logout and shutdown | [`NativeClient::logout`], [`NativeClient::shutdown`], and `_blocking` forms of both |
+//! | Classify a failure | [`ServiceRejected`], [`is_session_rejected`], [`AccountInterrupted`], [`NativeRequestNotSubmitted`] |
+//! | Low-level encoding | [`wire`], [`protobuf`] |
+//!
+//! # Send one text message
+//!
+//! After an approved login, call the client method with the recipient's exact
+//! WeChat username. Persist the task ID, timestamp and intended operation in your
+//! application's recovery record before submission. A client ID is not a server
+//! guarantee against duplicate sends.
+//!
+//! ```no_run
+//! use wechat_protocol::{wire, NativeClient, TextSendOptions, TextSendResult};
+//!
+//! async fn send_once(
+//!     client: &NativeClient,
+//!     recipient: &str,
+//!     text: &str,
+//!     task_id: &str,
+//!     created_at: u32,
+//! ) -> anyhow::Result<TextSendResult> {
+//!     let client_id = wire::client_message_id(task_id.as_bytes());
+//!     anyhow::ensure!(client_id != 0, "Choose another task ID");
+//!     client.send_text(recipient, text, TextSendOptions {
+//!         created_at,
+//!         client_message_id: client_id,
+//!         source: None,
+//!     }).await
+//! }
+//! ```
+//!
+//! The source package includes runnable `qr_login`, `send_text` and `sync_once`
+//! examples. They keep credentials in memory and perform no profile writes.
+//!
+//! # Application responsibilities
+//!
+//! The crate implements supported wire operations, transport authentication and
+//! response decoding. The embedding application owns credential storage, send
+//! intents, uncertainty handling, sync recovery and official-profile writeback.
+//! An accepted receipt establishes server acceptance, not recipient playback or
+//! completed local history. An error after submission must not cause a blind resend.
+//!
+//! This library does not launch or load the official client. Peer responses pass
+//! pinned MMTLS signature and record authentication before business decode.
+//! Account-owned requests run blocking transport work on Tokio's blocking pool.
+//! Login bootstrap and remaining low-level operations
+//! are blocking and require a blocking worker in async applications.
+//!
+//! # Errors
+//!
+//! Functions return `anyhow::Error`. Branch on the types it carries rather than
+//! on message text:
+//!
+//! - [`ServiceRejected`] holds the [`Service`] and the non-zero code of a
+//!   verified response. [`is_session_rejected`] is true when the account needs
+//!   a new login or renewal.
+//! - [`AccountInterrupted`] says why the account owner ended a request or a
+//!   notification wait: stopped, transferred, or superseded by a renewal.
+//! - [`NativeRequestNotSubmitted`] says nothing was handed to transport. An
+//!   interruption without it has an unknown outcome.
+//!
+//! # Blocking embedders
+//!
+//! Applications that run their own blocking workers need no Tokio runtime:
+//! use [`NativeClient::request_blocking`],
+//! [`NativeClient::open_push_connection_blocking`],
+//! [`NativeClient::renew_session_blocking`], [`NativeClient::logout_blocking`],
+//! [`PendingLogout::submit_blocking`] and [`NativeClient::shutdown_blocking`].
+pub mod business;
+
+pub mod calls;
+mod client;
+mod errors;
+pub use errors::{is_session_rejected, AccountInterrupted, Service, ServiceRejected};
+mod lan_login;
+pub use lan_login::login_lan_error_reason;
+pub mod contact_sync;
+pub mod crypto;
+pub mod file_upload;
+pub mod media;
+pub mod media_send;
+pub mod mmtls;
+mod notice;
+pub mod openim;
+pub use openim::{OpenImContact, OpenImServiceError};
+pub mod protobuf;
+pub mod push;
+pub mod quote_send;
+pub mod silk;
+pub mod wire;
+pub use client::*;
+
+pub const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
+
+mod sticker_id;
+pub mod sticker_packs;
+pub mod sticker_send;
+pub use sticker_id::{StickerId, StickerPackId};
+pub mod sticker_upload;
+
+pub mod custom_stickers;
+
+// Temporary iOS diagnostic probe: never log QR identifiers, keys, or credentials.
+#[no_mangle]
+pub extern "C" fn wechat_ios_qr_probe() -> i32 {
+    let dir = std::env::temp_dir();
+    let status_path = dir.join("wechat-ios-probe-status.txt");
+    let log_path = dir.join("wechat-ios-probe-events.log");
+    let _ = std::fs::remove_file(&log_path);
+    let report = |event: &str| {
+        let ts = wire::unix_time().unwrap_or(0);
+        let line = format!("{ts} {event}\n");
+        let _ = std::fs::write(&status_path, event);
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&log_path) {
+            let _ = f.write_all(line.as_bytes());
+        }
+    };
+    report("STARTING");
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> anyhow::Result<()> {
+        let client = NativeClient::new(NativeOptions::default())?;
+        let device = DeviceProfile::generate("UnifiedPCLinux x86_64".to_string())?;
+        let mut attempt = client.start_qr_login(device, "iOS network probe")?;
+        std::fs::write(dir.join("wechat-ios-probe-qr.png"), &attempt.qr_png)?;
+        report(&format!("QR_READY expires_at={} now={}", attempt.expires_at, wire::unix_time()?));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(245);
+        let mut last = String::new();
+        while std::time::Instant::now() < deadline {
+            let now = wire::unix_time()?;
+            if now >= attempt.expires_at {
+                report("EXPIRED_LOCAL");
+                anyhow::bail!("QR expired before approval");
+            }
+            match client.poll_login(&mut attempt) {
+                Ok(LoginStatus::Approved) => {
+                    report("APPROVED");
+                    match client.complete_login(&mut attempt) {
+                        Ok(account) => {
+                            report("LOGIN_SUCCESS");
+                            // Read-only authenticated transport test: never send messages or save their contents.
+                            let authenticated = NativeClient::from_account(account, NativeOptions::default())?;
+                            report("PUSH_CONNECTING");
+                            let mut connection = match authenticated.open_push_connection_blocking() {
+                                Ok(connection) => { report("PUSH_CONNECTED"); connection }
+                                Err(err) => { report(&format!("PUSH_CONNECT_ERROR: {err:#}")); return Err(err); }
+                            };
+                            report("SYNC_REQUESTING");
+                            match connection.sync(&[], 6) {
+                                Ok(batch) => {
+                                    let add_messages = batch.commands.iter().filter(|command| command.id == 5).count();
+                                    let mut decoded_messages = 0usize;
+                                    for command in &batch.commands {
+                                        if command.id == 5 && wire::decode_add_message(&command.payload, &authenticated.account_identity()?.own_username).is_ok() {
+                                            decoded_messages += 1;
+                                        }
+                                    }
+                                    report(&format!("SYNC_SUCCESS commands={} add_messages={} decoded_messages={} continuation={} flags={}", batch.commands.len(), add_messages, decoded_messages, batch.continuation, batch.flags));
+                                    return Ok(());
+                                }
+                                Err(err) => { report(&format!("SYNC_ERROR: {err:#}")); return Err(err); }
+                            }
+                        }
+                        Err(err) => { report(&format!("LOGIN_COMPLETE_ERROR: {err:#}")); return Err(err); }
+                    }
+                }
+                Ok(status) => {
+                    let state = format!("{status:?} remaining={}s", attempt.expires_at.saturating_sub(now));
+                    if state != last { report(&state); last = state; }
+                    if matches!(status, LoginStatus::Expired | LoginStatus::Cancelled | LoginStatus::Rejected | LoginStatus::Completed) {
+                        anyhow::bail!("Login stopped: {status:?}");
+                    }
+                }
+                Err(err) => {
+                    if is_retryable_login_poll_error(&err) {
+                        report(&format!("POLL_RETRYABLE_ERROR: {err:#}"));
+                    } else {
+                        report(&format!("POLL_ERROR: {err:#}"));
+                        return Err(err);
+                    }
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_secs(2));
+        }
+        report("TIMEOUT");
+        anyhow::bail!("QR login timed out")
+    }));
+    match result {
+        Ok(Ok(())) => 0,
+        Ok(Err(err)) => { report(&format!("FAILED: {err:#}")); 1 },
+        Err(_) => { report("PANIC"); 2 },
+    }
+}

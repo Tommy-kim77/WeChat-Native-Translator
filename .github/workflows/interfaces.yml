@@ -1,0 +1,144 @@
+name: Interfaces
+
+# Keeps interfaces/ in step with the code and reports listing changes on each PR.
+# See interfaces/README.md. The approval check lives in interfaces-approval.yml.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: interfaces-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+
+jobs:
+  listings:
+    name: Interfaces up to date
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The merge base with the PR's base branch decides which listings to check.
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      # Each listing runs only when its sources changed: `steps` in scripts/interfaces/index.mjs
+      # maps every listing to its paths, the same way `pnpm interfaces` chooses locally.
+      - name: Choose the listings this PR affects
+        id: affected
+        env:
+          INTERFACES_BASE: origin/${{ github.base_ref }}
+        run: |
+          listings=$(node scripts/interfaces/index.mjs --affected | xargs)
+          echo "Listings to check: ${listings:-none}"
+          {
+            echo "listings=$listings"
+            # cli, storage, websocket and http are cargo tests; crates reads rustdoc JSON.
+            echo "rust=$(grep -qwE 'cli|storage|websocket|http|crates' <<<"$listings" && echo true || echo false)"
+            echo "openclaw=$(grep -qw openclaw <<<"$listings" && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
+      # Required checks must always report, so a PR that affects no listing passes here.
+      - name: Skip unchanged listings
+        if: steps.affected.outputs.listings == ''
+        run: echo "No listing checked here has changed sources."
+      # UI routes and scenes need only Node.
+      - if: steps.affected.outputs.rust == 'true'
+        name: Identify native build dependencies
+        id: cache-key
+        run: python scripts/ci/cache-key.py rust --github-output
+      - if: steps.affected.outputs.rust == 'true'
+        uses: dtolnay/rust-toolchain@stable
+        id: rust
+        with:
+          toolchain: 1.93.1
+      # Covers the cargo-test build and the rustdoc builds in target/interfaces-rustdoc. The key
+      # follows the dependency set, so it no longer keeps one stale copy per compiler. No main-branch
+      # run fills it, so a PR saves its own copy for its later pushes.
+      - if: steps.affected.outputs.rust == 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/native-client-rust -> target
+          add-rust-environment-hash-key: false
+          key: interfaces-${{ steps.rust.outputs.cachekey }}-${{ steps.cache-key.outputs.rust }}
+      # Reuses the cmake packages Native client's main-branch runs cache.
+      - if: steps.affected.outputs.rust == 'true'
+        name: Install native build tools
+        uses: ./.github/actions/apt-install
+        with:
+          packages: cmake
+      - if: steps.affected.outputs.openclaw == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.affected.outputs.listings != ''
+        name: Check the affected listings against the code
+        env:
+          LISTINGS: ${{ steps.affected.outputs.listings }}
+        # Word splitting on purpose: one argument per listing name.
+        run: node scripts/interfaces/index.mjs --check $LISTINGS
+      - if: failure()
+        name: Explain a stale listing
+        run: |
+          echo "::error::An interface listing no longer matches the code. Run 'pnpm interfaces', review the diff under interfaces/ and commit it."
+          git status --short interfaces/
+
+  docs:
+    name: Interface docs
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Test the review tool
+        run: node --test scripts/interfaces/review.test.mjs scripts/interfaces/index.test.mjs scripts/interfaces/publish-comment.test.mjs
+      - name: Check OpenAPI compatibility with oasdiff
+        id: oasdiff
+        run: |
+          base=$(git merge-base "origin/${{ github.base_ref }}" HEAD)
+          if [ ! -f interfaces/http/openapi.json ] || ! git cat-file -e "$base:interfaces/http/openapi.json" 2>/dev/null; then
+            echo "No earlier OpenAPI document to compare."
+            exit 0
+          fi
+          git show "$base:interfaces/http/openapi.json" > "$RUNNER_TEMP/openapi-base.json"
+          version=1.36.0
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/oasdiff.tar.gz" "https://github.com/oasdiff/oasdiff/releases/download/v${version}/oasdiff_${version}_linux_amd64.tar.gz"
+          echo "dba65661f6d0f178a3e4884c309f19527a849388bb9df0e81545db76dbb697d6  $RUNNER_TEMP/oasdiff.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/oasdiff.tar.gz" -C "$RUNNER_TEMP" oasdiff
+          set +e
+          "$RUNNER_TEMP/oasdiff" breaking "$RUNNER_TEMP/openapi-base.json" interfaces/http/openapi.json --format markdown --fail-on ERR > "$RUNNER_TEMP/oasdiff.md"
+          status=$?
+          set -e
+          # A failure with no report is a tool error, not a breaking change.
+          if [ "$status" -ne 0 ] && [ ! -s "$RUNNER_TEMP/oasdiff.md" ]; then exit "$status"; fi
+          echo "report=$RUNNER_TEMP/oasdiff.md" >> "$GITHUB_OUTPUT"
+          echo "breaking=$([ "$status" -ne 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Compare listings, save the report and check documentation
+        run: |
+          args=(--base "origin/${{ github.base_ref }}" --report-file "$RUNNER_TEMP/interface-report.json" --fail-on-missing-docs)
+          if [ -n "${{ steps.oasdiff.outputs.report }}" ]; then args+=(--oasdiff "${{ steps.oasdiff.outputs.report }}"); fi
+          if [ "${{ steps.oasdiff.outputs.breaking }}" = true ]; then args+=(--oasdiff-breaking); fi
+          node scripts/interfaces/review.mjs "${args[@]}"
+      - name: Upload the comment report even when documentation is missing
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: interface-report-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/interface-report.json
+          retention-days: 7
+          if-no-files-found: warn
