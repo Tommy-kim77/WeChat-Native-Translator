@@ -1,5 +1,13 @@
 # WeChat Native Translator
 
+## Windows v0.1.33 다운로드
+
+**[Windows v0.1.33 실행 파일 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/raw/refs/heads/codex/windows/v0.1.33/windows/Releases/v0.1.33/WeChat-Native-Translator-Windows-v0.1.33-x64.exe)**
+
+Windows 10/11 64비트용입니다. 실행 파일을 열고 휴대폰 WeChat으로 QR 로그인을 승인하세요. 번역에는 본인의 DeepL API 키가 필요합니다.
+
+v0.1.33에는 대화 목록 갱신, 송신 메시지 번역 표시, 입력창 자동 확장, 입력창 아래 번역 미리보기, 검색 기능 수정이 포함됩니다. 휴대폰 메시지 동기화는 실제 계정 검증이 남아 있습니다.
+
 An independent macOS client for WeChat with built-in translation. It connects through Agent WeChat and signs in with a QR code approved in the WeChat mobile app.
 
 ## Features
