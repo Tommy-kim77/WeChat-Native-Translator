@@ -10,18 +10,32 @@ namespace NativeTranslator {
  sealed partial class Chat {
   bool syncingMessages;
   DateTime nextMessageSync;
+  async Task<bool> VerifyConnection() {
+   if (!connected) return false;
+   var profile = await engine.Json(AccountPath, Cancel);
+   if (Engine.Get(profile,"authenticated").Equals("true",StringComparison.OrdinalIgnoreCase)) return true;
+   connected = false;
+   approvedSession = false;
+   login.Enabled = true;
+   status.Text = UiLanguage.Text("연결이 끊겼습니다. QR 로그인으로 다시 연결하세요. 작성한 메시지는 유지됩니다.");
+   return false;
+  }
   async Task SyncMessagesIfDue() {
    if (!connected || busy || closing || syncingMessages || DateTime.UtcNow < nextMessageSync) return;
    syncingMessages = true;
    nextMessageSync = DateTime.UtcNow.AddSeconds(15);
+   bool failed = false;
    try {
     var operation = await engine.Json(AccountPath + "/sync", Cancel, new { });
     await AwaitMetadata(operation);
     await RefreshChat();
     await RefreshMessages();
    } catch (OperationCanceledException) {}
-   catch (Exception error) { if (!closing && !busy) status.Text = error.Message; }
+   catch (Exception) { failed = true; }
    finally { syncingMessages = false; }
+   if (failed && !closing && !busy) {
+    try { await VerifyConnection(); } catch (Exception) {}
+   }
   }
   void ScrollToLatest() {
    if (closing || !messages.IsHandleCreated) return;

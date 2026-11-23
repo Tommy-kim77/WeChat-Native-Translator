@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 
 namespace NativeTranslator {
  static class Package {
-  public const string Version = "0.1.33";
+  public const string Version = "0.1.34";
   const string EngineHash = "820ac63a769dd673958e56bd835ff5b6fffb5764269e0cb60b097869e1654a31";
   static string Hash(Stream input) {
    using (var sha = SHA256.Create()) return BitConverter.ToString(sha.ComputeHash(input)).Replace("-", "").ToLowerInvariant();

@@ -45,6 +45,7 @@ namespace NativeTranslator {
   }
 
   static readonly Dictionary<string,string[]> translations = new Dictionary<string,string[]>(StringComparer.Ordinal) {
+   { "연결이 끊겼습니다. QR 로그인으로 다시 연결하세요. 작성한 메시지는 유지됩니다.", new[] { "Disconnected. Sign in with QR again. Your draft is retained.", "连接已断开，请重新扫码登录。已保留正在编辑的消息。" } },
    { "이름 검색 · Enter로 전체 메시지 검색", new[] { "Search names · Press Enter to search all messages", "搜索名称 · 按回车搜索全部消息" } },
    { "전체 대화 검색", new[] { "Search all chats", "搜索全部聊天" } },
    { "검색 결과가 없습니다.", new[] { "No results found.", "没有搜索结果。" } },

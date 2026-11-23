@@ -163,6 +163,11 @@ namespace NativeTranslator {
    };
    messageTimer.Tick += async (s,e) => await RefreshMessages();
    timer.Tick += async (s,e) => {
+    if (busy || closing) return;
+    if (connected) {
+     try { if (!await VerifyConnection()) return; }
+     catch (Exception) { return; }
+    }
     if (!connected) {
      await CheckRestoredSession();
      if (!connected) return;
@@ -501,6 +506,7 @@ namespace NativeTranslator {
   async Task Submit() {
    await Run(async () => {
     if (!connected || room == null || rooms.SelectedItem == null) throw new IOException(UiLanguage.Text("로그인한 뒤 대화방을 선택하세요."));
+    if (!await VerifyConnection()) return;
     var source = draft.Text;
     if (string.IsNullOrWhiteSpace(source)) return;
     var id = room;
@@ -526,8 +532,8 @@ namespace NativeTranslator {
     var text = displayed.Substring(prefix.Length).Trim();
     if (text.Length == 0) throw new IOException(UiLanguage.Text("전송할 번역문을 입력하세요."));
     var originalRevision = revision;
-    ClearPreview();
     status.Text = UiLanguage.Text("전송 상태 확인 중…");
+    bool sendFailed = false;
     try {
      var payload = new Dictionary<string,object> { { "threadId", id }, { "text", text } };
      if (mentions.Count > 0) payload["mentions"] = new { userIds = mentions.Select(member => member.Id).ToArray() };
@@ -569,13 +575,16 @@ namespace NativeTranslator {
      }
      unresolved.Remove(id);
      quotedMessage = null;
+     ClearPreview();
      if (revision == originalRevision) draft.Clear();
      status.Text = UiLanguage.Text("전송 요청 확인");
     } catch (Exception) {
      if (closing) return;
      preview.Text = displayed;
      status.Text = UiLanguage.Text("전송 결과를 확인하지 못했습니다. 대화 내용을 먼저 확인하세요.");
+     sendFailed = true;
     }
+    if (sendFailed) { try { await VerifyConnection(); } catch (Exception) {} }
    });
    if (!closing && ContainsFocus) {
     if (prepared != null) preview.Focus();
