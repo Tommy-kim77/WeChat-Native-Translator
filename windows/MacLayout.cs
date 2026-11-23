@@ -184,12 +184,12 @@ namespace NativeTranslator {
    if (connected && index != 1) await RefreshDirectoryIfDue();
   }
   Control BuildFilters() {
-   var bar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1 };
-   var names = new[] { UiLanguage.Text("전체"), UiLanguage.Text("대화"), UiLanguage.Text("그룹"), UiLanguage.Text("연락처") };
+   var bar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+   var names = new[] { UiLanguage.Text("전체"), UiLanguage.Text("대화") };
    filterButtons = new Button[names.Length];
    for (int i = 0; i < names.Length; ++i) {
     int index = i;
-    bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, i == 3 ? 31 : 23));
+    bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
     var button = new PillButton { Text = names[i], AccessibleName = names[i], Dock = DockStyle.Fill };
     RoundedUi.ApplyButton(button,i==filterIndex);
     button.Margin = new Padding(2,3,2,4);
@@ -378,10 +378,11 @@ namespace NativeTranslator {
    catch (Exception error) { if (!closing && !busy) status.Text = UiLanguage.Text("그룹·연락처 목록: ") + error.Message; }
    finally { readingDirectory = false; }
   }
-  Task SearchHistory() {
-   if (!connected || room == null) throw new InvalidOperationException(UiLanguage.Text("검색할 대화방을 선택하세요."));
-   using (var dialog = new Form { Text = UiLanguage.Text("대화 기록 검색"), Width = 620, Height = 420, StartPosition = FormStartPosition.CenterParent }) {
-    var query = new TextBox { Dock = DockStyle.Top };
+  Task SearchHistory() { return SearchMessages(false, ""); }
+  Task SearchMessages(bool global, string initial) {
+   if (!connected || (!global && room == null)) throw new InvalidOperationException(UiLanguage.Text("검색할 대화방을 선택하세요."));
+   using (var dialog = new Form { Text = global ? UiLanguage.Text("전체 대화 검색") : UiLanguage.Text("대화 기록 검색"), Width = 620, Height = 420, StartPosition = FormStartPosition.CenterParent }) {
+    var query = new TextBox { Dock = DockStyle.Top, Text = initial };
     var results = new RichTextBox { Dock = DockStyle.Fill, ReadOnly = true, DetectUrls = false };
     var go = new Button { Text = UiLanguage.Text("검색"), Dock = DockStyle.Bottom };
     var id = room;
@@ -389,13 +390,26 @@ namespace NativeTranslator {
      if (string.IsNullOrWhiteSpace(query.Text)) return;
      go.Enabled = false;
      try {
-      var page = await engine.Json(RoomPath(id) + "/messages?limit=40&search=" + Engine.Part(query.Text.Trim()), Cancel);
-      if (!dialog.IsDisposed) results.Text = string.Join("\n\n", Engine.Items(page).Select(Body));
+      var path = global ? AccountPath + "/messages" : RoomPath(id) + "/messages";
+      var page = await engine.Pages(path + "?search=" + Engine.Part(query.Text.Trim()), Cancel);
+      var hits = page.Select(item => {
+       var peer = Engine.Get(item,"threadId");
+       var entry = inventory.Concat(directory).FirstOrDefault(candidate => candidate.Id == peer);
+       return (global ? (entry == null ? peer : RoomName(entry)) + "\n" : "") + Body(item);
+      });
+      var names = global ? inventory.Concat(directory).GroupBy(entry => entry.Id).Select(group => group.First())
+       .Where(entry => RoomName(entry).IndexOf(query.Text.Trim(),StringComparison.CurrentCultureIgnoreCase) >= 0)
+       .Select(RoomName) : Enumerable.Empty<string>();
+      if (!dialog.IsDisposed) {
+       var text = string.Join("\n\n", names.Concat(hits));
+       results.Text = text.Length > 0 ? text : UiLanguage.Text("검색 결과가 없습니다.");
+      }
      } catch (Exception error) { if (!dialog.IsDisposed) results.Text = error.Message; }
      finally { if (!dialog.IsDisposed) go.Enabled = true; }
     };
     dialog.Controls.Add(results); dialog.Controls.Add(query); dialog.Controls.Add(go);
     dialog.AcceptButton = go;
+    if (initial.Length > 0) dialog.Shown += (s,e) => go.PerformClick();
     dialog.ShowDialog(this);
    }
    return Task.FromResult(0);

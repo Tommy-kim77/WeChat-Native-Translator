@@ -45,6 +45,9 @@ namespace NativeTranslator {
   }
 
   static readonly Dictionary<string,string[]> translations = new Dictionary<string,string[]>(StringComparer.Ordinal) {
+   { "이름 검색 · Enter로 전체 메시지 검색", new[] { "Search names · Press Enter to search all messages", "搜索名称 · 按回车搜索全部消息" } },
+   { "전체 대화 검색", new[] { "Search all chats", "搜索全部聊天" } },
+   { "검색 결과가 없습니다.", new[] { "No results found.", "没有搜索结果。" } },
    { "[지원하지 않는 메시지 유형]", new[] { "[Unsupported message type]", "[不支持的消息类型]" } },
    { "개", new[] { "", "个" } },
    { "검색", new[] { "Search", "搜索" } },

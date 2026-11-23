@@ -15,6 +15,7 @@ namespace NativeTranslator {
   readonly Dictionary<string,List<string>> groupFaces = new Dictionary<string,List<string>>();
   readonly Dictionary<string,string> senderNames = new Dictionary<string,string>();
   bool loadingAvatars;
+  DateTime nextAvatarRefresh;
   string ownAvatarId = "";
   async void LoadAvatarsInBackground(string selected) { await LoadVisibleAvatars(selected); }
   string SenderName(IDictionary<string,object> item, string id) {
@@ -145,7 +146,8 @@ namespace NativeTranslator {
    }
   }
   async Task LoadVisibleAvatars(string selected) {
-   if (loadingAvatars || closing) return;
+   if (loadingAvatars || closing || DateTime.UtcNow < nextAvatarRefresh) return;
+   nextAvatarRefresh = DateTime.UtcNow.AddSeconds(15);
    loadingAvatars = true;
    try {
     if (selected != null && !groupFaces.ContainsKey(selected) && !selected.EndsWith("@chatroom",StringComparison.Ordinal))
@@ -174,7 +176,6 @@ namespace NativeTranslator {
       if (groupFaces.TryGetValue(item.Id,out members))
        foreach (var id in members) { if (closing || busy) return; await LoadAvatar(id,item.Id); }
      } else await LoadAvatar(item.Id);
-     if (!closing) rooms.Invalidate();
     }
    } catch (Exception) {}
    finally {

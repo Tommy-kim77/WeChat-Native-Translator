@@ -156,7 +156,7 @@ namespace NativeTranslator {
    var cursors = new HashSet<string>();
    string cursor = "";
    do {
-    var page = await Json(path + "?limit=200" + (cursor == "" ? "" : "&cursor=" + Part(cursor)), cancel);
+    var page = await Json(path + (path.Contains("?") ? "&" : "?") + "limit=200" + (cursor == "" ? "" : "&cursor=" + Part(cursor)), cancel);
     rows.AddRange(Items(page).Where(row => ids.Add(Get(row, "id"))));
     cursor = Get(page, "nextCursor");
     if (cursor != "" && !cursors.Add(cursor)) throw new IOException(UiLanguage.Text("대화 목록 페이지 응답이 반복됩니다."));

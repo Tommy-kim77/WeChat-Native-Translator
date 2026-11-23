@@ -31,7 +31,7 @@ namespace NativeTranslator {
   readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer { Interval = 3500 };
   readonly System.Windows.Forms.Timer messageTimer = new System.Windows.Forms.Timer { Interval = 1000 };
   bool refreshingMessages;
-  readonly ListBox rooms = new ListBox { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 84, IntegralHeight = false, BackColor = Color.FromArgb(248,250,249) };
+  readonly ListBox rooms = new StableRoomList { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 84, IntegralHeight = false, BackColor = Color.FromArgb(248,250,249) };
   readonly Panel messages = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = Color.FromArgb(246,247,246) };
   readonly Composer draft = new Composer { Dock = DockStyle.Fill, Multiline = true, AcceptsReturn = true, ScrollBars = ScrollBars.Vertical };
   readonly Composer preview = new Composer { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ForeColor = Color.DarkGreen, ScrollBars = ScrollBars.Vertical };
@@ -91,6 +91,14 @@ namespace NativeTranslator {
    side.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
    var search = new TextBox { Dock = DockStyle.Top, AccessibleName = UiLanguage.Text("대화방 검색"), Margin = Padding.Empty };
    search.TextChanged += (s,e) => Populate(search.Text);
+   var searchTip = new ToolTip();
+   searchTip.SetToolTip(search, UiLanguage.Text("이름 검색 · Enter로 전체 메시지 검색"));
+   search.Disposed += (s,e) => searchTip.Dispose();
+   search.KeyDown += async (s,e) => {
+    if (e.KeyCode != Keys.Enter) return;
+    e.SuppressKeyPress = true;
+    await Run(() => SearchMessages(true, search.Text));
+   };
    roomSearch = search;
    RoundedUi.ApplySearch(search);
    side.Controls.Add(BuildRoomSearch(search), 0, 0);
@@ -115,9 +123,24 @@ namespace NativeTranslator {
    pane.Controls.Add(BuildHeader(), 0, 0);
    pane.Controls.Add(BuildTranslationBar(),0,1); pane.Controls.Add(messages, 0, 2);
    messages.Resize += (s,e) => { if (shown.Count > 0) Render(); };
-   pane.Controls.Add(ComposerSurface(preview), 0, 3);
-   preview.TextChanged += (s,e) => pane.RowStyles[3].Height = preview.TextLength > 0 ? 52 : 0;
-   pane.Controls.Add(actions, 0, 4); pane.Controls.Add(status, 0, 5);
+   pane.Controls.Add(actions, 0, 3);
+   pane.Controls.Add(ComposerSurface(preview), 0, 4);
+   Action sizeComposer = () => {
+    if (draft.ClientSize.Width < 20) return;
+    int cap = Math.Max(80, Math.Min(240, ClientSize.Height / 3));
+    pane.RowStyles[3].Height = Math.Min(cap, Math.Max(62, TextRenderer.MeasureText(
+     draft.Text + " ", draft.Font, new Size(Math.Max(20,draft.ClientSize.Width - 16), int.MaxValue),
+     TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl | TextFormatFlags.NoPrefix).Height + 36));
+    pane.RowStyles[4].Height = preview.TextLength == 0 ? 0 : Math.Min(cap, Math.Max(60, TextRenderer.MeasureText(
+     preview.Text, preview.Font, new Size(Math.Max(20,preview.ClientSize.Width - 16), int.MaxValue),
+     TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl | TextFormatFlags.NoPrefix).Height + 24));
+    ScrollToLatest();
+   };
+   draft.TextChanged += (s,e) => sizeComposer();
+   draft.Resize += (s,e) => sizeComposer();
+   preview.TextChanged += (s,e) => sizeComposer();
+   pane.Controls.Add(status, 0, 5);
+   sizeComposer();
    body.Controls.Add(pane, 2, 0); Controls.Add(body);
    title.Text = UiLanguage.Text("대화방을 선택하세요");
    status.Text = UiLanguage.Text("Enter 번역 → Enter 전송 · Shift+Enter 줄바꿈");
@@ -146,6 +169,7 @@ namespace NativeTranslator {
     }
     await RefreshChat();
     await RefreshDirectoryIfDue();
+    await SyncMessagesIfDue();
    };
    Shown += async (s,e) => {
     if (designPreview) { ShowDesignExample(); return; }
@@ -295,17 +319,31 @@ namespace NativeTranslator {
   }
   void Populate(string search) {
    if (loadRemovedRooms != null) loadRemovedRooms();
-   var list = FilteredRooms().Where(x => !removedRooms.Contains(x.Id) &&
+   var candidates = string.IsNullOrWhiteSpace(search) ? FilteredRooms() :
+    inventory.Concat(directory).GroupBy(x => x.Id).Select(group => group.First());
+   var list = candidates.Where(x => !removedRooms.Contains(x.Id) &&
     (x.Name.IndexOf(search, StringComparison.CurrentCultureIgnoreCase) >= 0 ||
-     RoomName(x).IndexOf(search,StringComparison.CurrentCultureIgnoreCase) >= 0))
+     RoomName(x).IndexOf(search,StringComparison.CurrentCultureIgnoreCase) >= 0 ||
+     (x.Preview ?? "").IndexOf(search,StringComparison.CurrentCultureIgnoreCase) >= 0))
     .Select(x => new Room {Id=x.Id, Name=RoomName(x), Version=x.Version, Unread=x.Unread, Preview=x.Preview,Time=x.Time}).ToArray();
    if (rooms.Items.Count == list.Length && rooms.Items.Cast<Room>().Zip(list,(a,b) =>
     a.Id==b.Id && a.Name==b.Name && a.Unread==b.Unread && a.Time==b.Time && a.Preview==b.Preview).All(equal => equal)) return;
    listing = true;
+   int top = rooms.TopIndex;
    rooms.BeginUpdate();
    try {
-    rooms.Items.Clear(); rooms.Items.AddRange(list);
+    for (int index = 0; index < list.Length; index++) {
+     if (index >= rooms.Items.Count) rooms.Items.Add(list[index]);
+     else if (((Room)rooms.Items[index]).Id != list[index].Id ||
+              ((Room)rooms.Items[index]).ToString() != list[index].ToString() ||
+              ((Room)rooms.Items[index]).Time != list[index].Time ||
+              ((Room)rooms.Items[index]).Preview != list[index].Preview)
+      rooms.Items[index] = list[index];
+     else ((Room)rooms.Items[index]).Version = list[index].Version;
+    }
+    while (rooms.Items.Count > list.Length) rooms.Items.RemoveAt(rooms.Items.Count - 1);
     rooms.SelectedIndex = Array.FindIndex(list, x => x.Id == room);
+    if (rooms.Items.Count > 0) rooms.TopIndex = Math.Min(top, rooms.Items.Count - 1);
     var current = rooms.SelectedItem as Room;
     if (current != null) title.Text = current.Name;
    } finally { rooms.EndUpdate(); listing = false; }
@@ -357,6 +395,19 @@ namespace NativeTranslator {
   string TranslationKey(IDictionary<string, object> row) {
    return (translationOwner ?? "") + "\n" + room + "\n" + Engine.Get(row, "id") + "\n" + languages[incoming] + "\n" + Body(row);
   }
+  string OriginalSendKey(string destination, string serverId) {
+   return (translationOwner ?? "") + "\n" + destination + "\nsent-original\n" + serverId;
+  }
+  string MessageTranslation(IDictionary<string,object> row) {
+   if (Engine.Get(row,"direction") == "outgoing") {
+    var serverId = Engine.Get(row,"serverId");
+    if (serverId != "") {
+     var original = CachedTranslation(OriginalSendKey(room,serverId));
+     if (original != null) return original;
+    }
+   }
+   return CachedTranslation(TranslationKey(row));
+  }
   string CachedTranslation(string key) {
    string value;
    if (!translations.TryGetValue(key, out value)) {
@@ -377,9 +428,9 @@ namespace NativeTranslator {
    foreach (var item in shown.AsEnumerable().Reverse().ToArray()) {
     if (room != id || busy || closing || !automatic) return;
     var type = Engine.Get(item, "type");
-    if (Engine.Object(item,"recall") != null || Engine.Get(item, "direction") == "outgoing" || (type != "1" && !(type == "49" && Engine.Get(item, "appMessageType") == "57"))) continue;
+    if (Engine.Object(item,"recall") != null || (type != "1" && !(type == "49" && Engine.Get(item, "appMessageType") == "57"))) continue;
     var key = TranslationKey(item);
-    if (CachedTranslation(key) != null || !pendingTranslations.Add(key)) continue;
+    if (MessageTranslation(item) != null || !pendingTranslations.Add(key)) continue;
     try {
      var source = Body(item);
      if (string.IsNullOrWhiteSpace(source)) continue;
@@ -415,7 +466,7 @@ namespace NativeTranslator {
   }
   void Render() {
    var rows = shown.Where(row => !hiddenMessages.Contains(Engine.Get(row, "id"))).Select(row => {
-    var translated = Engine.Object(row, "recall") == null ? CachedTranslation(TranslationKey(row)) : null;
+    var translated = Engine.Object(row, "recall") == null ? MessageTranslation(row) : null;
     var label = AttachmentLabel(row);
     var type = Engine.Get(row, "type");
     var senderId = Engine.Get(row,"senderId");
@@ -425,7 +476,7 @@ namespace NativeTranslator {
      SenderId = Engine.Get(row,"direction") == "outgoing" ? ownAvatarId : (groupIncoming ? senderId : room ?? ""),
      Text = Engine.Object(row, "recall") != null ? UiLanguage.Text("회수된 메시지") : label != "" ? "[" + label + "]" : type == "1" || (type == "49" && Engine.Get(row, "appMessageType") == "57") ? Body(row) : UiLanguage.Text("[지원하지 않는 메시지 유형]"), Translation = translated };
    }).ToArray();
-   var signature = messages.ClientSize.Width + "|" + string.Join("\n", rows.Select(x => x.Id + "|" + x.Out + "|" + x.Text + "|" + x.Translation + "|" + x.Sender + "|" + x.SenderId + "|" + avatars.ContainsKey(x.SenderId)));
+   var signature = messages.ClientSize.Width + "|" + messages.ClientSize.Height + "|" + string.Join("\n", rows.Select(x => x.Id + "|" + x.Out + "|" + x.Text + "|" + x.Translation + "|" + x.Sender + "|" + x.SenderId + "|" + avatars.ContainsKey(x.SenderId)));
    if (signature == rendered) return;
    rendered = signature;
    messages.SuspendLayout();
@@ -445,7 +496,7 @@ namespace NativeTranslator {
     }
     messages.AutoScrollMinSize = new Size(0,y);
    } finally { messages.ResumeLayout(); }
-   messages.AutoScrollPosition = new Point(0,messages.AutoScrollMinSize.Height);
+   ScrollToLatest();
   }
   async Task Submit() {
    await Run(async () => {
@@ -507,6 +558,15 @@ namespace NativeTranslator {
       return;
      }
      if (finalState != "accepted") throw new IOException(UiLanguage.Text("전송 미확인"));
+     var acceptedServerId = Engine.Get(result,"serverId");
+     if (acceptedServerId != "") {
+      var originalKey = OriginalSendKey(id,acceptedServerId);
+      translations[originalKey] = source;
+      try { if (translationStore != null) translationStore.Save(originalKey,source); }
+      catch (IOException) { status.Text = UiLanguage.Text("번역문을 컴퓨터에 저장하지 못했습니다."); }
+      catch (UnauthorizedAccessException) { status.Text = UiLanguage.Text("번역문을 컴퓨터에 저장하지 못했습니다."); }
+      catch (System.Security.Cryptography.CryptographicException) { status.Text = UiLanguage.Text("번역문을 컴퓨터에 저장하지 못했습니다."); }
+     }
      unresolved.Remove(id);
      quotedMessage = null;
      if (revision == originalRevision) draft.Clear();
