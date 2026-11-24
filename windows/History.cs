@@ -49,7 +49,7 @@ namespace NativeTranslator {
     olderCursor = next;
     historyExtended = viewingOlder = true;
     shown = MergeHistory(older,shown);
-    Render();
+    Render(false);
     messages.PerformLayout();
     messages.AutoScrollPosition = new Point(0, Math.Max(0, offset + messages.AutoScrollMinSize.Height - height));
    } finally { if (!closing) UpdateHistoryButton(); }

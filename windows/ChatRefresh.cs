@@ -43,8 +43,9 @@ namespace NativeTranslator {
   }
   void ScrollToLatest() {
    if (closing || viewingOlder || !messages.IsHandleCreated) return;
+   var destination = room;
    BeginInvoke((Action)(() => {
-    if (closing || viewingOlder || messages.IsDisposed) return;
+    if (closing || viewingOlder || room != destination || messages.IsDisposed) return;
     messages.PerformLayout();
     messages.AutoScrollPosition = new Point(0, messages.AutoScrollMinSize.Height);
    }));

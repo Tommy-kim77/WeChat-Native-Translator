@@ -248,8 +248,8 @@ namespace NativeTranslator {
    historyButton.Click += async (sender,args) => await Run(LoadOlderMessages);
    bar.Controls.Add(historyButton);
    messages.Scroll += (sender,args) => {
-    if (messages.VerticalScroll.Value + messages.ClientSize.Height >= messages.AutoScrollMinSize.Height - 12)
-     viewingOlder = false;
+    if (!rebuildingMessages && args.ScrollOrientation == ScrollOrientation.VerticalScroll)
+     viewingOlder = args.NewValue + messages.ClientSize.Height < messages.AutoScrollMinSize.Height - 24;
    };
    return bar;
   }

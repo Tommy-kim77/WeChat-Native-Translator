@@ -1,9 +1,15 @@
-# WeChat Native Translator Windows v0.1.1
+# WeChat Native Translator Windows v0.1.36
 
-`Releases/v0.1.1/WeChat-Native-Translator-Windows-v0.1.1-x64.exe`는 Windows 10/11 x64와 .NET Framework 4.8을 대상으로 합니다. 단일 EXE에 Agent WeChat 2.3.0을 포함하며 실행 시 현재 사용자 전용 폴더에 엔진을 풉니다.
+Windows 10/11 x64 및 .NET Framework 4.8용입니다. 실행 파일에는 통신 엔진이 포함되어 있습니다.
 
-**QR 로그인**을 클릭한 뒤 휴대폰 WeChat으로 QR을 스캔하고 승인하세요. 번역은 **언어 설정**에 저장한 DeepL API 키를 사용합니다. 첫 Enter는 번역 미리보기, 다음 Enter는 전송입니다. 번역문을 편집할 수 있고 Shift+Enter는 줄바꿈입니다. 앱과 엔진 데이터는 `%LOCALAPPDATA%\WeChat Native Translator Windows`에 저장됩니다.
+[실행 파일 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/download/windows-v0.1.36/WeChat-Native-Translator-Windows-v0.1.36-x64.exe)
 
-Mac v0.2.3 기준으로 목록 필터, 언어 선택, 기록 검색, 그룹 멤버 보기, 연락처 이름 조회와 원문 복사·인용·숨기기·회수 메뉴를 이식했습니다. 기존 프로필에서 모바일 승인 후 엔진 HTTP 500이 관측됐으며, 실제 계정에서 위 기능을 검증하지 못했습니다. Apple Translation, 아바타, 그룹 초대, 멘션 작성, UI 언어 전환은 미이식입니다.
+1. EXE를 실행한 뒤 **QR 로그인**을 누르고 휴대폰 WeChat으로 승인을 완료하세요.
+2. **언어 설정**에서 본인의 DeepL API 키를 등록하세요. 번역할 내용은 DeepL 서버로 전송됩니다.
+3. 첫 Enter로 번역 미리보기를 만들고, 번역문을 수정한 뒤 Enter로 전송합니다. Shift+Enter는 줄바꿈입니다.
 
-재빌드는 [Agent WeChat 2.3.0 Windows x64 엔진](https://github.com/thisnick/agent-wechat/releases/tag/v2.3.0)을 받아 `./build.ps1 -EnginePath <엔진 경로>`로 실행합니다. 빌드가 엔진 SHA-256을 검증하고 엔진과 라이선스를 EXE에 포함합니다.
+v0.1.36에서는 QR 승인 후 계정 확인이 실패했을 때 로그인 버튼이 계속 잠기는 문제와, 이전 대화를 읽다가 새 메시지·번역·아바타 갱신으로 하단으로 이동하는 문제를 수정했습니다. 맨 아래로 직접 이동하면 최신 메시지를 다시 따라갑니다. v0.1.35의 이전 메시지 불러오기, 초안 보존, 전송 재시도 처리는 유지했습니다.
+
+Windows 10에서 가상 메시지로 UI 검증 10개와 독립 프로필의 내장 엔진 시작 검증을 통과했습니다. 이번 검증은 실제 계정의 송수신·모바일 메시지 동기화를 포함하지 않습니다.
+
+일반 빌드는 `build.ps1 -EnginePath <검증된 엔진 경로>`입니다. 회귀 검증은 `Tests/run-windows.ps1`을 사용합니다. PowerShell 스크립트를 허용하지 않는 환경에서는 보안 설정을 변경하지 않고 `Tests/run-windows.cmd`로 같은 컴파일러를 호출할 수 있습니다. 공유 폴더가 실행을 허용하지 않으면 CMD를 로컬 임시 폴더에 복사한 뒤 첫 번째 인수로 Windows 소스 폴더를 전달하세요. 테스트는 v0.1.35 EXE에 포함된 엔진을 추출하고 빌드에 지정된 SHA-256을 확인합니다.

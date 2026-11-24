@@ -14,9 +14,9 @@ namespace NativeTranslator {
   static string KeyPath { get { return Path.Combine(Engine.Data, "deepl-key"); } }
   readonly HttpClient http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(20) };
   public string Key { get; private set; }
-  public Translator() {
+  public Translator(bool loadKey = true) {
    Key = "";
-   if (File.Exists(KeyPath)) {
+   if (loadKey && File.Exists(KeyPath)) {
     try { Key = Encoding.UTF8.GetString(ProtectedData.Unprotect(File.ReadAllBytes(KeyPath), null, DataProtectionScope.CurrentUser)); }
     catch (CryptographicException) {}
     catch (IOException) {}

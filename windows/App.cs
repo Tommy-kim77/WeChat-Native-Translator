@@ -25,7 +25,7 @@ namespace NativeTranslator {
  }
  sealed partial class Chat : Form {
   readonly Engine engine;
-  readonly Translator translator = new Translator();
+  readonly Translator translator;
   readonly CancellationTokenSource lifetime = new CancellationTokenSource();
   CancellationToken Cancel { get { return lifetime.Token; } }
   readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer { Interval = 3500 };
@@ -75,6 +75,7 @@ namespace NativeTranslator {
   }
   public Chat(string verificationDirectory = null, bool openQr = false, bool designPreview = false) {
    engine = new Engine(verificationDirectory);
+   translator = new Translator(!designPreview);
    if (!designPreview) translationStore = new TranslationStore(verificationDirectory ?? Engine.Data);
    Text = "WeChat Native Translator · Windows v" + Package.Version;
    using (var stream = typeof(Chat).Assembly.GetManifestResourceStream("app.icon"))
@@ -299,8 +300,7 @@ namespace NativeTranslator {
       if (!dialog.IsDisposed) dialog.Close();
       if (qr.Image != null) qr.Image.Dispose();
       if (!closing) {
-       login.Enabled = !connected && !approvedSession;
-       if (approvedSession && !connected) status.Text = UiLanguage.Text("휴대폰 승인 완료 · 계정 또는 대화 목록 확인 실패");
+       FinishLoginAttempt();
       }
      }
     }
@@ -481,7 +481,9 @@ namespace NativeTranslator {
     default: return "";
    }
   }
-  void Render() {
+  void Render(bool preserveViewport = true) {
+   if (rebuildingMessages) return;
+   var viewport = CaptureMessageViewport();
    var rows = shown.Where(row => !hiddenMessages.Contains(Engine.Get(row, "id"))).Select(row => {
     var translated = Engine.Object(row, "recall") == null ? MessageTranslation(row) : null;
     var label = AttachmentLabel(row);
@@ -496,6 +498,7 @@ namespace NativeTranslator {
    var signature = messages.ClientSize.Width + "|" + messages.ClientSize.Height + "|" + string.Join("\n", rows.Select(x => x.Id + "|" + x.Out + "|" + x.Text + "|" + x.Translation + "|" + x.Sender + "|" + x.SenderId + "|" + avatars.ContainsKey(x.SenderId)));
    if (signature == rendered) return;
    rendered = signature;
+   rebuildingMessages = true;
    messages.SuspendLayout();
    try {
     ClearMessageCards();
@@ -512,8 +515,9 @@ namespace NativeTranslator {
      y += AddMessageCard(y, entry.Id, entry.Out, entry.SenderId, entry.Sender, entry.Text, entry.Translation, entry.Time);
     }
     messages.AutoScrollMinSize = new Size(0,y);
-   } finally { messages.ResumeLayout(); }
-   ScrollToLatest();
+   } finally { messages.ResumeLayout(); rebuildingMessages = false; }
+   if (preserveViewport) RestoreMessageViewport(viewport);
+   else ScrollToLatest();
   }
   async Task Submit() {
    await Run(async () => {
