@@ -6,16 +6,18 @@ An independent WeChat client for macOS and Windows with built-in translation. It
 
 | 운영체제 | 지원 환경 | 실행 파일 | 안내 |
 | --- | --- | --- | --- |
-| Windows v0.1.32 | Windows 10/11 x64 | [Windows EXE 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/download/windows-v0.1.32/WeChat-Native-Translator-Windows-v0.1.32-x64.exe) | [Windows 사용 방법](#windows-v0132-사용-방법) |
-| macOS v0.2.5 | Apple Silicon, macOS 15 이상 | [macOS ZIP 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/download/macos-v0.2.5/WeChat-Native-Translator-v0.2.5-macOS.zip) | [macOS 릴리스](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/tag/macos-v0.2.5) |
+| Windows v0.1.34 | Windows 10/11 x64 | [Windows EXE 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/download/windows-v0.1.34/WeChat-Native-Translator-Windows-v0.1.34-x64.exe) | [Windows 사용 방법](#windows-v0134-사용-방법) |
+| macOS v0.2.10 | Apple Silicon, macOS 15 이상 | [macOS ZIP 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/download/macos-v0.2.10/WeChat-Native-Translator-v0.2.10-macOS.zip) | [macOS 릴리스](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/tag/macos-v0.2.10) |
 
-## Windows v0.1.32 사용 방법
+[macOS v0.2.10 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/release/v0.2.10) · [Windows v0.1.34 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/windows/v0.1.34/windows)
+
+## Windows v0.1.34 사용 방법
 
 1. 위 표에서 Windows EXE를 내려받아 실행하세요. 통신 엔진은 EXE에 포함되어 있습니다.
 2. 앱에서 **QR 로그인**을 누르고 휴대폰 위챗으로 QR 코드를 스캔해 로그인을 승인하세요.
 3. 번역을 사용하려면 **언어 설정**에 본인의 DeepL API 키를 등록하세요. 번역할 메시지 내용은 DeepL로 전송됩니다.
 
-Windows 릴리스 페이지의 **Assets**에서도 동일한 EXE를 받을 수 있습니다. [Windows 릴리스](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/tag/windows-v0.1.32) · [Windows v0.1.32 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/windows/v0.1.32/windows)
+Windows 릴리스 페이지의 **Assets**에서도 동일한 EXE를 받을 수 있습니다. [Windows 릴리스](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/tag/windows-v0.1.34) · [Windows v0.1.34 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/windows/v0.1.34/windows)
 
 ## Features
 
