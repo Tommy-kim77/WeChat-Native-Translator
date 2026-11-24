@@ -244,6 +244,13 @@ namespace NativeTranslator {
    };
    autoToggle = auto;
    bar.Controls.Add(auto);
+   historyButton = new Button { Text = UiLanguage.Text("이전 메시지"), AutoSize = true, Enabled = false, Height = 36 };
+   historyButton.Click += async (sender,args) => await Run(LoadOlderMessages);
+   bar.Controls.Add(historyButton);
+   messages.Scroll += (sender,args) => {
+    if (messages.VerticalScroll.Value + messages.ClientSize.Height >= messages.AutoScrollMinSize.Height - 12)
+     viewingOlder = false;
+   };
    return bar;
   }
   string TranslationToggleText() { return UiLanguage.Text("文ᴬ   자동번역 ") + (automatic ? "ON" : "OFF"); }

@@ -34,13 +34,17 @@ namespace NativeTranslator {
    catch (Exception) { failed = true; }
    finally { syncingMessages = false; }
    if (failed && !closing && !busy) {
-    try { await VerifyConnection(); } catch (Exception) {}
+    try {
+     if (await VerifyConnection()) status.Text = UiLanguage.Text("메시지 동기화에 실패했습니다. 잠시 후 자동으로 다시 시도합니다.");
+    } catch (Exception) {
+     if (!closing) status.Text = UiLanguage.Text("메시지 동기화에 실패했습니다. 잠시 후 자동으로 다시 시도합니다.");
+    }
    }
   }
   void ScrollToLatest() {
-   if (closing || !messages.IsHandleCreated) return;
+   if (closing || viewingOlder || !messages.IsHandleCreated) return;
    BeginInvoke((Action)(() => {
-    if (closing || messages.IsDisposed) return;
+    if (closing || viewingOlder || messages.IsDisposed) return;
     messages.PerformLayout();
     messages.AutoScrollPosition = new Point(0, messages.AutoScrollMinSize.Height);
    }));

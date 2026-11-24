@@ -57,6 +57,15 @@ namespace NativeTranslator {
   public void CopyDraftsTo(Chat next) {
    foreach (var entry in drafts) next.drafts.Add(entry.Key, entry.Value);
    foreach (var entry in draftMembers) next.draftMembers.Add(entry.Key, entry.Value);
+   foreach (var entry in unresolved) next.unresolved.Add(entry.Key, entry.Value);
+   next.room = room;
+   next.draft.Text = draft.Text;
+   next.prepared = prepared;
+   next.preview.ReadOnly = preview.ReadOnly;
+   next.preview.Text = preview.Text;
+   next.quotedMessage = quotedMessage;
+   next.quotedRoom = quotedRoom;
+   next.shown = new List<IDictionary<string,object>>(shown);
   }
   string AccountPath { get { return "/accounts/" + Engine.Part(account); } }
   string RoomPath(string id) { return AccountPath + "/threads/" + Engine.Part(id); }
@@ -158,7 +167,7 @@ namespace NativeTranslator {
     if (selected == null || selected.Id == room) return;
     if (room != null) drafts[room] = draft.Text;
     room = selected.Id; title.Text = selected.Name; headerAvatar.Invalidate(); draft.Text = drafts.ContainsKey(room) ? drafts[room] : "";
-    ClearPreview(); shown.Clear(); rendered = null; ClearMessageCards();
+    ClearPreview(); shown.Clear(); ResetHistory(); rendered = null; ClearMessageCards();
     await Task.WhenAll(RefreshMessages(),RefreshSelectedRoomName(selected));
    };
    messageTimer.Tick += async (s,e) => await RefreshMessages();
@@ -380,7 +389,10 @@ namespace NativeTranslator {
     var row = inventory.FirstOrDefault(x => x.Id == idNow);
     var result = await engine.Json(RoomPath(idNow) + "/messages?limit=80", Cancel);
     if (room != idNow || closing || busy) return;
-    shown = Engine.Items(result).Reverse().ToList();
+    var latest = Engine.Items(result).Reverse().ToList();
+    if (!historyExtended) olderCursor = Engine.Get(result,"nextCursor");
+    shown = MergeHistory(shown, latest);
+    UpdateHistoryButton();
     Render();
     LoadAvatarsInBackground(idNow);
     if (automatic && translator.Key != "") TranslateInBackground(idNow);

@@ -19,6 +19,8 @@ namespace NativeTranslator {
    if (File.Exists(KeyPath)) {
     try { Key = Encoding.UTF8.GetString(ProtectedData.Unprotect(File.ReadAllBytes(KeyPath), null, DataProtectionScope.CurrentUser)); }
     catch (CryptographicException) {}
+    catch (IOException) {}
+    catch (UnauthorizedAccessException) {}
    }
   }
   public void SetKey(string value) {
