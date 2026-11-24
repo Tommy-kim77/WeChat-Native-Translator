@@ -6,18 +6,18 @@ An independent WeChat client for macOS and Windows with built-in translation. It
 
 | 운영체제 | 지원 환경 | 실행 파일 | 안내 |
 | --- | --- | --- | --- |
-| Windows v0.1.34 | Windows 10/11 x64 | [Windows EXE 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/download/windows-v0.1.34/WeChat-Native-Translator-Windows-v0.1.34-x64.exe) | [Windows 사용 방법](#windows-v0134-사용-방법) |
-| macOS v0.2.10 | Apple Silicon, macOS 15 이상 | [macOS ZIP 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/download/macos-v0.2.10/WeChat-Native-Translator-v0.2.10-macOS.zip) | [macOS 릴리스](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/tag/macos-v0.2.10) |
+| Windows v0.1.36 | Windows 10/11 x64 | [Windows EXE 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/download/windows-v0.1.36/WeChat-Native-Translator-Windows-v0.1.36-x64.exe) | [Windows 사용 방법](#windows-v0136-사용-방법) |
+| macOS v0.2.11 | Apple Silicon, macOS 15 이상 | [macOS ZIP 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/download/macos-v0.2.11/WeChat-Native-Translator-v0.2.11-macOS.zip) | [macOS 릴리스](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/tag/macos-v0.2.11) |
 
-[macOS v0.2.10 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/release/v0.2.10) · [Windows v0.1.34 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/windows/v0.1.34/windows)
+[macOS v0.2.11 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/release/v0.2.11) · [Windows v0.1.36 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/windows/v0.1.36/windows)
 
-## Windows v0.1.34 사용 방법
+## Windows v0.1.36 사용 방법
 
 1. 위 표에서 Windows EXE를 내려받아 실행하세요. 통신 엔진은 EXE에 포함되어 있습니다.
 2. 앱에서 **QR 로그인**을 누르고 휴대폰 위챗으로 QR 코드를 스캔해 로그인을 승인하세요.
 3. 번역을 사용하려면 **언어 설정**에 본인의 DeepL API 키를 등록하세요. 번역할 메시지 내용은 DeepL로 전송됩니다.
 
-Windows 릴리스 페이지의 **Assets**에서도 동일한 EXE를 받을 수 있습니다. [Windows 릴리스](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/tag/windows-v0.1.34) · [Windows v0.1.34 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/windows/v0.1.34/windows)
+Windows 릴리스 페이지의 **Assets**에서도 동일한 EXE를 받을 수 있습니다. [Windows 릴리스](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/tag/windows-v0.1.36) · [Windows v0.1.36 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/windows/v0.1.36/windows)
 
 ## Features
 
@@ -34,7 +34,7 @@ Windows 릴리스 페이지의 **Assets**에서도 동일한 EXE를 받을 수 �
 
 ## Build on macOS
 
-Version 0.2.10 targets Apple Silicon and macOS 15 or later. Install the Xcode command-line tools and obtain the Apple Silicon `wx` binary from [Agent WeChat v2.3.0](https://github.com/thisnick/agent-wechat/releases/tag/v2.3.0). Follow the upstream [binary verification instructions](https://thisnick.github.io/agent-wechat/setup/install/) and make the downloaded file executable. From this directory run:
+Version 0.2.11 targets Apple Silicon and macOS 15 or later. Install the Xcode command-line tools and obtain the Apple Silicon `wx` binary from [Agent WeChat v2.3.0](https://github.com/thisnick/agent-wechat/releases/tag/v2.3.0). Follow the upstream [binary verification instructions](https://thisnick.github.io/agent-wechat/setup/install/) and make the downloaded file executable. From this directory run:
 
 ```sh
 bash build.sh /absolute/path/to/wx-v2.3.0-darwin-arm64
@@ -65,3 +65,5 @@ Mac 창의 빨간 닫기 버튼은 창을 Dock으로 최소화합니다. 앱을 
 그룹에서 받은 메시지 위에 보낸 사람 이름과 프로필 사진을 표시합니다. 돋보기로 이 기기에 동기화된 대화 기록을 검색할 수 있습니다. 말풍선 옆 `…` 메뉴에서 복사, 인용 답장, 이 앱에서 숨기기를 사용할 수 있습니다. 내가 보낸 메시지는 위챗이 허용하는 경우 상대방 화면에서도 회수할 수 있습니다.
 
 Apple 번역이 기본값입니다. DeepL을 사용하려면 **언어 설정 → 번역 엔진**에서 DeepL을 선택하고 본인의 DeepL API 키를 확인·저장하세요. 키는 macOS 키체인에 저장됩니다. DeepL을 선택한 동안 번역하는 텍스트는 DeepL 서버로 전송되며 API 사용량이 차감됩니다.
+
+macOS v0.2.11에서는 전송 버튼과 Enter의 자동 번역 동작을 통일했습니다. 입력문이 전송 언어와 같으면 한 번에 전송하며, 인증이 만료되면 초안을 유지한 채 QR 로그인 화면으로 돌아갑니다. 이전 대화를 읽을 때 스크롤 위치를 유지합니다.

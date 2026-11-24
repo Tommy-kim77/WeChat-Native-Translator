@@ -38,7 +38,7 @@ private enum AvatarRequest: Hashable {
 
 @MainActor
 final class ChatModel: ObservableObject {
-    let backend = Backend()
+    let backend: Backend
     @Published var account: Account?
     @Published var ready = false
     @Published var connected = false
@@ -120,7 +120,11 @@ final class ChatModel: ObservableObject {
     }
 
     var shouldTranslateOnEnter: Bool {
-        confirmedPreview == nil && automaticTranslationEnabled && !composerDraft.isWebLinkOnly
+        guard confirmedPreview == nil, automaticTranslationEnabled else { return false }
+        let prose = composerDraft.prose
+        guard prose.contains(where: \.isLetter) else { return false }
+        if MixedLanguageText(prose) != nil { return true }
+        return Self.manualSource(prose)?.split(separator: "-").first != outgoing.rawValue.split(separator: "-").first
     }
     @Published var config: TranslationSession.Configuration?
     @Published var translating = false
@@ -169,7 +173,9 @@ final class ChatModel: ObservableObject {
     private var nextTranslationRetry = Date.distantFuture
     private var activeAutomaticRoute: (source: String?, target: String)?
 
-    init(preferences: UserDefaults = .standard, preferredLanguages: [String] = Locale.preferredLanguages) {
+    init(preferences: UserDefaults = .standard, preferredLanguages: [String] = Locale.preferredLanguages,
+         backend: Backend? = nil) {
+        self.backend = backend ?? Backend()
         self.preferences = preferences
         self.hiddenMessageIDs = preferences.object(forKey: "hiddenMessageIDs") as? [String: [String]] ?? [:]
         self.removedRoomNamesByAccount = preferences.object(forKey: "removedRoomNamesByAccount") as? [String: [String: String]] ?? [:]
@@ -411,11 +417,18 @@ final class ChatModel: ObservableObject {
 
     func poll() async {
         while !Task.isCancelled {
-            if ready, !connected, !loggingIn, let current = account,
-               let updated = try? await backend.accounts().first(where: { $0.id == current.id }), updated.authenticated == true {
-                account = updated
-                connected = true
-                status = UIMessage("연결됨 · 대화 목록 불러오는 중…")
+            if ready, !loggingIn, let current = account {
+                do {
+                    let updated = try await backend.accounts().first(where: { $0.id == current.id })
+                    if let updated { account = updated }
+                    if updated?.authenticated == true {
+                        if !connected {
+                            connected = true
+                            status = UIMessage("연결됨 · 대화 목록 불러오는 중…")
+                        }
+                    } else if connected { disconnectForLogin() }
+                } catch is CancellationError { return }
+                catch { reportConnectionError(error) }
             }
             if connected, let account {
                 do {
@@ -427,10 +440,22 @@ final class ChatModel: ObservableObject {
                     }
                     warmRecentHistory(account.id)
                 } catch is CancellationError { return }
-                catch { status = UIMessage(error: error) }
+                catch { reportConnectionError(error) }
             }
             try? await Task.sleep(for: .seconds(2))
         }
+    }
+
+    private func disconnectForLogin() {
+        connected = false
+        status = UIMessage("연결이 끊겼습니다. QR 로그인으로 다시 연결하세요. 작성한 메시지는 유지됩니다.")
+    }
+
+    private func reportConnectionError(_ error: Error) {
+        if case ConnectionError.response(let code, let reason) = error,
+           code == 401 || ["needs_login", "not_authenticated"].contains(reason ?? "") {
+            disconnectForLogin()
+        } else { status = UIMessage(error: error) }
     }
 
     private func rememberMessages(_ latest: [Message], in room: String) {
@@ -511,7 +536,7 @@ final class ChatModel: ObservableObject {
             } catch {
                 if selection == room, !Task.isCancelled {
                     loadingMessages = false
-                    status = UIMessage(error: error)
+                    reportConnectionError(error)
                 }
             }
             try? await Task.sleep(for: .seconds(2))
@@ -892,6 +917,12 @@ final class ChatModel: ObservableObject {
         return detected == nil || detected == .english || text.split(whereSeparator: \.isWhitespace).count <= 3 ? "en" : nil
     }
 
+    private static func manualSource(_ prose: String) -> String? {
+        // A short Korean sentence containing a Latin term can be misidentified as a European language.
+        if nameSource(prose) == Language.korean.rawValue { return Language.korean.rawValue }
+        return NLLanguageRecognizer.dominantLanguage(for: prose)?.rawValue
+    }
+
     func select(_ room: String?) {
         guard room != selection, !sending else { return }
         if let room, isRoomRemoved(room) { return }
@@ -941,9 +972,7 @@ final class ChatModel: ObservableObject {
         work = (id, content, message, selection, target)
         let prose = content.prose
         let mixed = MixedLanguageText(prose) != nil
-        let korean = Language.korean.rawValue
-        // A short Korean sentence with a Latin term can be misidentified as a European language.
-        let code = Self.nameSource(prose) == korean ? korean : NLLanguageRecognizer.dominantLanguage(for: prose)?.rawValue
+        let code = Self.manualSource(prose)
         if !prose.contains(where: \.isLetter) || (!mixed && code?.split(separator: "-").first == target.rawValue.split(separator: "-").first) {
             accept(content)
             return
@@ -1230,6 +1259,7 @@ struct ChatView: View {
     @State private var showingNameEditor = false
     @State private var showingLanguageSettings = false
     @State private var showingRemovedRooms = false
+    @State private var followingLatestMessages = true
     @State private var showingTranslationOptions = false
     @State private var deepLKeyInput = ""
     @State private var showingChatInfo = false
@@ -1521,12 +1551,22 @@ struct ChatView: View {
                     }
                     .padding(.horizontal, 18).padding(.top, 14)
                 }
-                .onAppear { scroller.scrollTo("latest", anchor: .bottom) }
-                .onChange(of: model.messages.last?.id) { _, _ in scroller.scrollTo("latest", anchor: .bottom) }
+                .onAppear {
+                    followingLatestMessages = true
+                    scroller.scrollTo("latest", anchor: .bottom)
+                }
+                .onChange(of: model.selection) { _, _ in
+                    followingLatestMessages = true
+                    scroller.scrollTo("latest", anchor: .bottom)
+                }
+                .onChange(of: model.messages.last?.id) { _, _ in
+                    if followingLatestMessages { scroller.scrollTo("latest", anchor: .bottom) }
+                }
                 .onScrollGeometryChange(for: MessageScrollGeometry.self) { MessageScrollGeometry($0) } action: { previous, current in
-                    if previous.isNearBottom,
-                       previous.contentHeight != current.contentHeight || previous.viewportHeight != current.viewportHeight {
-                        scroller.scrollTo("latest", anchor: .bottom)
+                    if previous.contentHeight != current.contentHeight || previous.viewportHeight != current.viewportHeight {
+                        if followingLatestMessages { scroller.scrollTo("latest", anchor: .bottom) }
+                    } else {
+                        followingLatestMessages = current.isNearBottom
                     }
                 }
             }
@@ -1641,7 +1681,7 @@ struct ChatView: View {
                 Button(language.label("초안 번역"), systemImage: "translate") { model.translate(model.draft) }
                     .labelStyle(.iconOnly).buttonStyle(MacWeChatIconButton(selected: model.preview != nil))
                     .help(language.label("초안 번역")).disabled(model.draft.isEmpty || model.translating || model.sending)
-                Button { Task { await model.send() } } label: {
+                Button { Task { await model.submitComposer() } } label: {
                     Image(systemName: "paperplane.fill").font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 37, height: 37)

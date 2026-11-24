@@ -216,12 +216,18 @@ final class Backend {
     private var process: Process?
     private var endpoint: String?
     private var token = ""
-    private let session: URLSession = {
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 5
-        config.connectionProxyDictionary = [:]
-        return URLSession(configuration: config, delegate: NoRedirect(), delegateQueue: nil)
-    }()
+    private let session: URLSession
+
+    init(endpoint: String? = nil, session: URLSession? = nil) {
+        self.endpoint = endpoint
+        if let session { self.session = session }
+        else {
+            let config = URLSessionConfiguration.ephemeral
+            config.timeoutIntervalForRequest = 5
+            config.connectionProxyDictionary = [:]
+            self.session = URLSession(configuration: config, delegate: NoRedirect(), delegateQueue: nil)
+        }
+    }
 
     static func appDataDirectory() throws -> URL {
         try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,

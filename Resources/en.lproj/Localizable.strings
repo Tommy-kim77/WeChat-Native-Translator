@@ -1,6 +1,7 @@
 "위챗 연결 엔진 시작 중…" = "Starting the WeChat connection…";
 "표시 이름을 저장하지 못했습니다." = "Could not save the display name.";
 "연결됨" = "Connected";
+"연결이 끊겼습니다. QR 로그인으로 다시 연결하세요. 작성한 메시지는 유지됩니다." = "Disconnected. Sign in with QR again. Your draft is kept.";
 "개인 위챗 계정으로 로그인하세요." = "Sign in with your WeChat account.";
 "위챗 로그인 QR 요청 중…" = "Requesting a WeChat sign-in code…";
 "연결됨 · 대화 목록 불러오는 중…" = "Connected · Loading chats…";
