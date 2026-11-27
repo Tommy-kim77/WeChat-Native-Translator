@@ -6,18 +6,18 @@ An independent WeChat client for macOS and Windows with built-in translation. It
 
 | 운영체제 | 지원 환경 | 실행 파일 | 안내 |
 | --- | --- | --- | --- |
-| Windows v0.1.37 | Windows 10/11 x64 | [Windows EXE 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/download/windows-v0.1.37/WeChat-Native-Translator-Windows-v0.1.37-x64.exe) | [Windows 사용 방법](#windows-v0137-사용-방법) |
+| Windows v0.1.36 | Windows 10/11 x64 | [Windows EXE 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/download/windows-v0.1.36/WeChat-Native-Translator-Windows-v0.1.36-x64.exe) | [Windows 사용 방법](#windows-v0136-사용-방법) |
 | macOS v0.2.12 | Apple Silicon, macOS 15 이상 | [macOS ZIP 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/download/macos-v0.2.12/WeChat-Native-Translator-v0.2.12-macOS.zip) | [macOS 릴리스](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/tag/macos-v0.2.12) |
 
-[macOS v0.2.12 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/release/v0.2.12) · [Windows v0.1.37 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/windows/v0.1.37/windows)
+[macOS v0.2.12 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/release/v0.2.12) · [Windows v0.1.36 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/windows/v0.1.36/windows)
 
-## Windows v0.1.37 사용 방법
+## Windows v0.1.36 사용 방법
 
 1. 위 표에서 Windows EXE를 내려받아 실행하세요. 통신 엔진은 EXE에 포함되어 있습니다.
 2. 앱에서 **QR 로그인**을 누르고 휴대폰 위챗으로 QR 코드를 스캔해 로그인을 승인하세요.
 3. 번역을 사용하려면 **언어 설정**에 본인의 DeepL API 키를 등록하세요. 번역할 메시지 내용은 DeepL로 전송됩니다.
 
-Windows 릴리스 페이지의 **Assets**에서도 동일한 EXE를 받을 수 있습니다. [Windows 릴리스](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/tag/windows-v0.1.37) · [Windows v0.1.37 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/windows/v0.1.37/windows)
+Windows 릴리스 페이지의 **Assets**에서도 동일한 EXE를 받을 수 있습니다. [Windows 릴리스](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/tag/windows-v0.1.36) · [Windows v0.1.36 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/windows/v0.1.36/windows)
 
 ## Features
 
@@ -66,4 +66,6 @@ Mac 창의 빨간 닫기 버튼은 창을 Dock으로 최소화합니다. 앱을 
 
 Apple 번역이 기본값입니다. DeepL을 사용하려면 **언어 설정 → 번역 엔진**에서 DeepL을 선택하고 본인의 DeepL API 키를 확인·저장하세요. 키는 macOS 키체인에 저장됩니다. DeepL을 선택한 동안 번역하는 텍스트는 DeepL 서버로 전송되며 API 사용량이 차감됩니다.
 
-macOS v0.2.12와 Windows v0.1.37에서는 한·중·영 입력이 전송 언어와 같으면 Enter 한 번으로 전송합니다. `OK`, `Hi`, `Invoice` 같은 짧은 영어도 영어로 처리하며, 같은 언어 전송에는 번역 API나 DeepL 키가 필요하지 않습니다. 번역 아이콘으로 미리보기를 직접 만들고 수정한 경우에는 수정한 내용을 전송합니다.
+macOS v0.2.12에서는 한·중·영 입력이 전송 언어와 같으면 Enter 한 번으로 전송합니다. `OK`, `Hi`, `Invoice` 같은 짧은 영어도 영어로 처리하며, 같은 언어 전송에는 번역 API나 DeepL 키가 필요하지 않습니다. 번역 아이콘으로 미리보기를 직접 만들고 수정한 경우에는 수정한 내용을 전송합니다.
+
+Windows의 같은 언어 즉시 전송 수정은 [작업 브랜치](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/windows/same-language-enter/windows)에 등록되어 있습니다. Windows v0.1.37 실행 검증과 배포는 대기 중이며, 현재 다운로드 가능한 Windows 릴리스는 v0.1.36입니다.
