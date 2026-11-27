@@ -1,0 +1,292 @@
+[
+  {
+    "text": "OK",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "ok",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "Invoice",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "invoice",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "Hi",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "hi",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "no",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "NO",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "Yes",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "Thanks",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "Thank you",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "PSE-400",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "Good morning",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "Please send the invoice.",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "Line one\nLine two",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "Invoice https://soltech.co.kr/prod/sfc400hp/",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "@Tommy OK",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "HELLO",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "Café",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "ＡＢＣ",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "안녕하세요",
+    "target": "ko",
+    "translate": false
+  },
+  {
+    "text": "네",
+    "target": "ko",
+    "translate": false
+  },
+  {
+    "text": "ㅋㅋ",
+    "target": "ko",
+    "translate": false
+  },
+  {
+    "text": "Invoice 를 보내주세요",
+    "target": "ko",
+    "translate": false
+  },
+  {
+    "text": "PSE 스위치는 at 방식입니다.",
+    "target": "ko",
+    "translate": false
+  },
+  {
+    "text": "한국어 https://example.com/Invoice",
+    "target": "ko",
+    "translate": false
+  },
+  {
+    "text": "你好",
+    "target": "zh-Hans",
+    "translate": false
+  },
+  {
+    "text": "好的",
+    "target": "zh-Hans",
+    "translate": false
+  },
+  {
+    "text": "收到",
+    "target": "zh-Hans",
+    "translate": false
+  },
+  {
+    "text": "请发送发票。",
+    "target": "zh-Hans",
+    "translate": false
+  },
+  {
+    "text": "請發送發票。",
+    "target": "zh-Hans",
+    "translate": false
+  },
+  {
+    "text": "这个PSE交换机是at方案的",
+    "target": "zh-Hans",
+    "translate": false
+  },
+  {
+    "text": "PD模块 BT 方案",
+    "target": "zh-Hans",
+    "translate": false
+  },
+  {
+    "text": "12345",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "😀 👍",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "https://soltech.co.kr/prod/sfc400hp/",
+    "target": "en",
+    "translate": false
+  },
+  {
+    "text": "12345",
+    "target": "ko",
+    "translate": false
+  },
+  {
+    "text": "😀 👍",
+    "target": "ko",
+    "translate": false
+  },
+  {
+    "text": "https://soltech.co.kr/prod/sfc400hp/",
+    "target": "ko",
+    "translate": false
+  },
+  {
+    "text": "12345",
+    "target": "zh-Hans",
+    "translate": false
+  },
+  {
+    "text": "😀 👍",
+    "target": "zh-Hans",
+    "translate": false
+  },
+  {
+    "text": "https://soltech.co.kr/prod/sfc400hp/",
+    "target": "zh-Hans",
+    "translate": false
+  },
+  {
+    "text": "안녕하세요",
+    "target": "en",
+    "translate": true
+  },
+  {
+    "text": "Invoice 를 보내주세요",
+    "target": "en",
+    "translate": true
+  },
+  {
+    "text": "你好",
+    "target": "en",
+    "translate": true
+  },
+  {
+    "text": "hello 안녕하세요",
+    "target": "en",
+    "translate": true
+  },
+  {
+    "text": "こんにちは",
+    "target": "en",
+    "translate": true
+  },
+  {
+    "text": "Привет",
+    "target": "en",
+    "translate": true
+  },
+  {
+    "text": "OK",
+    "target": "ko",
+    "translate": true
+  },
+  {
+    "text": "Please send the invoice.",
+    "target": "ko",
+    "translate": true
+  },
+  {
+    "text": "你好",
+    "target": "ko",
+    "translate": true
+  },
+  {
+    "text": "hello 안녕하세요",
+    "target": "ko",
+    "translate": true
+  },
+  {
+    "text": "한국어 中文",
+    "target": "ko",
+    "translate": true
+  },
+  {
+    "text": "Invoice",
+    "target": "zh-Hans",
+    "translate": true
+  },
+  {
+    "text": "안녕하세요",
+    "target": "zh-Hans",
+    "translate": true
+  },
+  {
+    "text": "please 发票",
+    "target": "zh-Hans",
+    "translate": true
+  },
+  {
+    "text": "we need an invoice 发票",
+    "target": "zh-Hans",
+    "translate": true
+  },
+  {
+    "text": "こんにちは",
+    "target": "zh-Hans",
+    "translate": true
+  }
+]

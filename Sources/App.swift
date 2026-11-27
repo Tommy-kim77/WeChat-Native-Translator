@@ -121,10 +121,7 @@ final class ChatModel: ObservableObject {
 
     var shouldTranslateOnEnter: Bool {
         guard confirmedPreview == nil, automaticTranslationEnabled else { return false }
-        let prose = composerDraft.prose
-        guard prose.contains(where: \.isLetter) else { return false }
-        if MixedLanguageText(prose) != nil { return true }
-        return Self.manualSource(prose)?.split(separator: "-").first != outgoing.rawValue.split(separator: "-").first
+        return OutgoingLanguage.requiresTranslation(composerDraft.prose, to: outgoing)
     }
     @Published var config: TranslationSession.Configuration?
     @Published var translating = false
@@ -918,7 +915,8 @@ final class ChatModel: ObservableObject {
     }
 
     private static func manualSource(_ prose: String) -> String? {
-        // A short Korean sentence containing a Latin term can be misidentified as a European language.
+        // Use the same supported-language policy for preview and Enter decisions.
+        if prose.contains(where: \.isLetter), !OutgoingLanguage.requiresTranslation(prose, to: .english) { return Language.english.rawValue }
         if nameSource(prose) == Language.korean.rawValue { return Language.korean.rawValue }
         return NLLanguageRecognizer.dominantLanguage(for: prose)?.rawValue
     }
@@ -973,7 +971,7 @@ final class ChatModel: ObservableObject {
         let prose = content.prose
         let mixed = MixedLanguageText(prose) != nil
         let code = Self.manualSource(prose)
-        if !prose.contains(where: \.isLetter) || (!mixed && code?.split(separator: "-").first == target.rawValue.split(separator: "-").first) {
+        if !OutgoingLanguage.requiresTranslation(prose, to: target) {
             accept(content)
             return
         }

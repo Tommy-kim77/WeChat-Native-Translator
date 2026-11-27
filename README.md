@@ -6,25 +6,25 @@ An independent WeChat client for macOS and Windows with built-in translation. It
 
 | 운영체제 | 지원 환경 | 실행 파일 | 안내 |
 | --- | --- | --- | --- |
-| Windows v0.1.36 | Windows 10/11 x64 | [Windows EXE 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/download/windows-v0.1.36/WeChat-Native-Translator-Windows-v0.1.36-x64.exe) | [Windows 사용 방법](#windows-v0136-사용-방법) |
-| macOS v0.2.11 | Apple Silicon, macOS 15 이상 | [macOS ZIP 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/download/macos-v0.2.11/WeChat-Native-Translator-v0.2.11-macOS.zip) | [macOS 릴리스](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/tag/macos-v0.2.11) |
+| Windows v0.1.37 | Windows 10/11 x64 | [Windows EXE 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/download/windows-v0.1.37/WeChat-Native-Translator-Windows-v0.1.37-x64.exe) | [Windows 사용 방법](#windows-v0137-사용-방법) |
+| macOS v0.2.12 | Apple Silicon, macOS 15 이상 | [macOS ZIP 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/download/macos-v0.2.12/WeChat-Native-Translator-v0.2.12-macOS.zip) | [macOS 릴리스](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/tag/macos-v0.2.12) |
 
-[macOS v0.2.11 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/release/v0.2.11) · [Windows v0.1.36 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/windows/v0.1.36/windows)
+[macOS v0.2.12 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/release/v0.2.12) · [Windows v0.1.37 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/windows/v0.1.37/windows)
 
-## Windows v0.1.36 사용 방법
+## Windows v0.1.37 사용 방법
 
 1. 위 표에서 Windows EXE를 내려받아 실행하세요. 통신 엔진은 EXE에 포함되어 있습니다.
 2. 앱에서 **QR 로그인**을 누르고 휴대폰 위챗으로 QR 코드를 스캔해 로그인을 승인하세요.
 3. 번역을 사용하려면 **언어 설정**에 본인의 DeepL API 키를 등록하세요. 번역할 메시지 내용은 DeepL로 전송됩니다.
 
-Windows 릴리스 페이지의 **Assets**에서도 동일한 EXE를 받을 수 있습니다. [Windows 릴리스](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/tag/windows-v0.1.36) · [Windows v0.1.36 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/windows/v0.1.36/windows)
+Windows 릴리스 페이지의 **Assets**에서도 동일한 EXE를 받을 수 있습니다. [Windows 릴리스](https://github.com/Tommy-kim77/WeChat-Native-Translator/releases/tag/windows-v0.1.37) · [Windows v0.1.37 소스](https://github.com/Tommy-kim77/WeChat-Native-Translator/tree/codex/windows/v0.1.37/windows)
 
 ## Features
 
 - Automatically translate Korean, English and Simplified Chinese messages, including quoted replies, into the selected incoming language.
 - Use the macOS preferred language for the app interface and the initial incoming translation. Open Language settings to choose the interface language, incoming translation and outgoing translation separately. The app remembers each selection.
 - Apple Translation is the default and needs no API key. To use DeepL, choose it in Language settings and verify your own [DeepL API key](https://developers.deepl.com/docs/getting-started/auth). The app stores the key in macOS Keychain. DeepL receives the text it translates, and those requests count toward your DeepL API usage.
-- Open the translation menu in the chat header to choose languages or toggle automatic translation. When it is on, Enter previews the outgoing translation. Edit the preview if needed, then press Enter or click Send. When it is off and there is no preview, Enter sends the draft directly. The translation button can still create a preview. Use Shift+Enter for a new line.
+- Open the translation menu in the chat header to choose languages or toggle automatic translation. When it is on, Enter sends the original immediately if the input matches the outgoing language (Korean, Chinese or English); otherwise it previews the outgoing translation. Edit the preview if needed, then press Enter or click Send. When it is off and there is no preview, Enter sends the draft directly. The translation button can still create a preview. Use Shift+Enter for a new line.
 - Browse chats in the order provided by the local WeChat engine, with conversation names, latest-message previews, contact photos and group avatars. In All, directory entries without a synced chat appear below the chats.
 - Right-click a chat to remove it from the app's list. Use Removed chats in the sidebar to restore a chat. Chat history is kept.
 - In group chats, incoming messages show the sender's WeChat display name and profile photo when available. Search any conversation's locally synced message history using the magnifying glass.
@@ -34,7 +34,7 @@ Windows 릴리스 페이지의 **Assets**에서도 동일한 EXE를 받을 수 �
 
 ## Build on macOS
 
-Version 0.2.11 targets Apple Silicon and macOS 15 or later. Install the Xcode command-line tools and obtain the Apple Silicon `wx` binary from [Agent WeChat v2.3.0](https://github.com/thisnick/agent-wechat/releases/tag/v2.3.0). Follow the upstream [binary verification instructions](https://thisnick.github.io/agent-wechat/setup/install/) and make the downloaded file executable. From this directory run:
+Version 0.2.12 targets Apple Silicon and macOS 15 or later. Install the Xcode command-line tools and obtain the Apple Silicon `wx` binary from [Agent WeChat v2.3.0](https://github.com/thisnick/agent-wechat/releases/tag/v2.3.0). Follow the upstream [binary verification instructions](https://thisnick.github.io/agent-wechat/setup/install/) and make the downloaded file executable. From this directory run:
 
 ```sh
 bash build.sh /absolute/path/to/wx-v2.3.0-darwin-arm64
@@ -50,7 +50,7 @@ This branch contains the macOS source. The Windows source is published on its ow
 
 ## 한국어 안내
 
-위챗 모바일 앱으로 QR을 스캔하면 맥에서 대화할 수 있습니다. 앱 화면과 받는 메시지의 기본 번역 언어는 맥의 선호 언어를 따릅니다. **언어 설정**에서 앱 화면, 받는 메시지 번역, 보내는 메시지 번역을 각각 선택할 수 있으며 앱을 다시 실행해도 설정이 유지됩니다. 한국어·영어·중국어 간 자동 번역과 인용 답장을 지원합니다. 메시지 입력 후 Enter를 누르면 번역문이 표시됩니다. 번역문을 직접 수정한 뒤 Enter를 누르거나 **전송**을 클릭하면 수정한 내용이 전송됩니다. Shift+Enter는 줄바꿈입니다. 대화방 이름은 원문 그대로 표시하며 파일 송수신을 지원합니다.
+위챗 모바일 앱으로 QR을 스캔하면 맥에서 대화할 수 있습니다. 앱 화면과 받는 메시지의 기본 번역 언어는 맥의 선호 언어를 따릅니다. **언어 설정**에서 앱 화면, 받는 메시지 번역, 보내는 메시지 번역을 각각 선택할 수 있으며 앱을 다시 실행해도 설정이 유지됩니다. 한국어·영어·중국어 간 자동 번역과 인용 답장을 지원합니다. 입력 언어가 보내는 메시지 번역 언어와 같으면 Enter 한 번으로 원문을 바로 보냅니다. 다른 언어이면 Enter를 누르면 번역문이 표시됩니다. 번역문을 직접 수정한 뒤 Enter를 누르거나 **전송**을 클릭하면 수정한 내용이 전송됩니다. Shift+Enter는 줄바꿈입니다. 대화방 이름은 원문 그대로 표시하며 파일 송수신을 지원합니다.
 
 현재 버전은 Apple Silicon 맥과 macOS 15 이상용입니다. 빌드에는 Xcode 명령줄 도구와 위에서 안내한 Agent WeChat `wx` 실행 파일이 필요합니다.
 
@@ -66,4 +66,4 @@ Mac 창의 빨간 닫기 버튼은 창을 Dock으로 최소화합니다. 앱을 
 
 Apple 번역이 기본값입니다. DeepL을 사용하려면 **언어 설정 → 번역 엔진**에서 DeepL을 선택하고 본인의 DeepL API 키를 확인·저장하세요. 키는 macOS 키체인에 저장됩니다. DeepL을 선택한 동안 번역하는 텍스트는 DeepL 서버로 전송되며 API 사용량이 차감됩니다.
 
-macOS v0.2.11에서는 전송 버튼과 Enter의 자동 번역 동작을 통일했습니다. 입력문이 전송 언어와 같으면 한 번에 전송하며, 인증이 만료되면 초안을 유지한 채 QR 로그인 화면으로 돌아갑니다. 이전 대화를 읽을 때 스크롤 위치를 유지합니다.
+macOS v0.2.12와 Windows v0.1.37에서는 한·중·영 입력이 전송 언어와 같으면 Enter 한 번으로 전송합니다. `OK`, `Hi`, `Invoice` 같은 짧은 영어도 영어로 처리하며, 같은 언어 전송에는 번역 API나 DeepL 키가 필요하지 않습니다. 번역 아이콘으로 미리보기를 직접 만들고 수정한 경우에는 수정한 내용을 전송합니다.

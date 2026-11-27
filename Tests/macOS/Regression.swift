@@ -64,6 +64,22 @@ final class FixtureProtocol: URLProtocol {
         model.account = Account(id: "fixture", authenticated: true)
         model.connected = true
         model.select("fixture-room")
+        struct LanguageCase: Decodable { let text: String; let target: String; let translate: Bool }
+        let cases = try JSONDecoder().decode([LanguageCase].self, from: Data(contentsOf: URL(fileURLWithPath: "Tests/outgoing-language-cases.json")))
+        for item in cases {
+            let target = Language(rawValue: item.target)!
+            model.outgoing = target
+            model.updateDraft(item.text, edit: nil, in: "fixture-room")
+            check(model.shouldTranslateOnEnter == item.translate, "language policy: \(item.target) / \(item.text.replacingOccurrences(of: "\n", with: " · "))")
+            if !item.translate {
+                let count = FixtureProtocol.sentTexts.count
+                await model.submitComposer()
+                check(FixtureProtocol.sentTexts.count == count + 1 && FixtureProtocol.sentTexts.last == item.text && model.draft.isEmpty && model.preview == nil,
+                      "one submit sends original without preview")
+            }
+        }
+        model.outgoing = .english
+        FixtureProtocol.sentTexts.removeAll()
         model.updateDraft("Please send the invoice.", edit: nil, in: "fixture-room")
         check(!model.shouldTranslateOnEnter, "English to English bypasses preview")
         await model.submitComposer()
@@ -82,6 +98,12 @@ final class FixtureProtocol: URLProtocol {
         model.updateDraft("https://soltech.co.kr/prod/sfc400hp/", edit: nil, in: "fixture-room")
         await model.submitComposer()
         check(FixtureProtocol.sentTexts.last == "https://soltech.co.kr/prod/sfc400hp/", "URL remains unchanged")
+        model.updateDraft("Invoice", edit: nil, in: "fixture-room")
+        model.translate(model.draft)
+        check(model.preview == "Invoice" && !model.translating, "manual same-language preview stays available")
+        model.updatePreview("Manually revised invoice.", edit: nil, in: "fixture-room")
+        await model.submitComposer()
+        check(FixtureProtocol.sentTexts.last == "Manually revised invoice.", "edited same-language preview is respected")
         model.updateDraft("보존할 초안", edit: nil, in: "fixture-room")
         model.ready = true
         FixtureProtocol.authenticated = false
