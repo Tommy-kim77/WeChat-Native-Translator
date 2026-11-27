@@ -1,6 +1,6 @@
 using System.Reflection;
 [assembly: AssemblyTitle("WeChat Native Translator Windows")]
 [assembly: AssemblyProduct("WeChat Native Translator Windows")]
-[assembly: AssemblyVersion("0.1.36.0")]
-[assembly: AssemblyFileVersion("0.1.36.0")]
-[assembly: AssemblyInformationalVersion("0.1.36-windows")]
+[assembly: AssemblyVersion("0.1.37.0")]
+[assembly: AssemblyFileVersion("0.1.37.0")]
+[assembly: AssemblyInformationalVersion("0.1.37-windows")]

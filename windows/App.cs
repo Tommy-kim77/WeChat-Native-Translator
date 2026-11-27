@@ -127,7 +127,7 @@ namespace NativeTranslator {
    send.Font = new Font("Segoe MDL2 Assets",15); send.Dock=DockStyle.Fill;
    var translate = new PillButton { Text="文ᴬ", AccessibleName=UiLanguage.Text("번역 미리보기"), Dock=DockStyle.Fill };
    RoundedUi.ApplyButton(translate,true);
-   translate.Click += async (s,e) => { if (prepared == null) await Submit(); else preview.Focus(); };
+   translate.Click += async (s,e) => { if (prepared == null) await Submit(true); else preview.Focus(); };
    actions.Controls.Add(attach,0,0); actions.Controls.Add(ComposerSurface(draft),1,0);
    actions.Controls.Add(translate,2,0); actions.Controls.Add(send,3,0);
    pane.Controls.Add(BuildHeader(), 0, 0);
@@ -519,7 +519,7 @@ namespace NativeTranslator {
    if (preserveViewport) RestoreMessageViewport(viewport);
    else ScrollToLatest();
   }
-  async Task Submit() {
+  async Task Submit(bool forceTranslation = false) {
    await Run(async () => {
     if (!connected || room == null || rooms.SelectedItem == null) throw new IOException(UiLanguage.Text("로그인한 뒤 대화방을 선택하세요."));
     if (!await VerifyConnection()) return;
@@ -530,7 +530,8 @@ namespace NativeTranslator {
     var prefix = string.Concat(mentions.Select(member => member.Token));
     var body = source.Substring(prefix.Length).Trim();
     if (mentions.Count > 0 && body.Length == 0) throw new IOException(UiLanguage.Text("멘션 뒤에 보낼 내용을 입력하세요."));
-    if (prepared == null) {
+    bool translateDraft = forceTranslation || OutgoingLanguage.RequiresTranslation(mentions.Count == 0 ? source : body, languages[outgoing]);
+    if (prepared == null && translateDraft) {
      if (!EnsureDeepLKey()) return;
      int version = revision, lang = outgoing;
      status.Text = UiLanguage.Text("번역 중…");
@@ -542,7 +543,7 @@ namespace NativeTranslator {
      status.Text = UiLanguage.Text("번역문을 확인한 뒤 Enter를 누르세요.");
      return;
     }
-    var displayed = preview.Text;
+    var displayed = prepared == null ? source : preview.Text;
     if (prefix.Length > 0 && !displayed.StartsWith(prefix, StringComparison.Ordinal))
      throw new IOException(UiLanguage.Text("멘션은 메시지 입력창에서 수정하세요."));
     var text = displayed.Substring(prefix.Length).Trim();

@@ -7,6 +7,32 @@ using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
 using NativeTranslator;
+using System.Net;
+using System.Net.Http;
+using System.Text;
+using System.Threading.Tasks;
+using System.Web.Script.Serialization;
+
+sealed class FixtureHandler : HttpMessageHandler {
+ public int Sends, Translations;
+ public string LastText;
+ public bool RejectSends;
+ protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken cancellation) {
+  object response;
+  if(request.RequestUri.Host=="fixture.invalid") {
+   if(request.Method==HttpMethod.Post && request.RequestUri.AbsolutePath.EndsWith("/sends")) {
+    var payload=new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(await request.Content.ReadAsStringAsync());
+    Sends++; LastText=Convert.ToString(payload["text"]);
+    response=new {id="fixture-send-"+Sends,destination=Convert.ToString(payload["threadId"]),state=RejectSends ? "failed" : "accepted"};
+   } else response=new {id="personal",authenticated=true,ownUsername="fixture"};
+  } else if(request.RequestUri.Host=="api-free.deepl.com") {
+   Translations++;
+   response=new {translations=new[]{new {text="Fixture translated invoice."}}};
+  } else throw new InvalidOperationException("Unexpected network destination in fixture");
+  return new HttpResponseMessage(HttpStatusCode.OK) {Content=new StringContent(new JavaScriptSerializer().Serialize(response),Encoding.UTF8,"application/json")};
+ }
+}
+
 
 static class Regression {
  const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -20,6 +46,16 @@ static class Regression {
   panel.AutoScrollPosition=new Point(0,Math.Max(0,y));
   typeof(ScrollableControl).GetMethod("OnScroll",Private).Invoke(panel,new object[]{new ScrollEventArgs(ScrollEventType.ThumbPosition,-panel.AutoScrollPosition.Y,ScrollOrientation.VerticalScroll)});
   Pump();
+ }
+ static void PressEnter(TextBox input,Chat chat) {
+  chat.Activate(); input.Focus(); Pump();
+  Check(input.Focused,"composer receives Enter");
+  object message=Message.Create(input.Handle,0x100,(IntPtr)Keys.Enter,IntPtr.Zero);
+  var handled=(bool)input.GetType().GetMethod("ProcessCmdKey",Private).Invoke(input,new object[]{message,Keys.Enter});
+  Check(handled,"native Enter handler accepts one press");
+  var end=DateTime.UtcNow.AddSeconds(4);
+  do { Pump(); } while((bool)Get(chat,"busy") && DateTime.UtcNow<end);
+  Check(!(bool)Get(chat,"busy"),"submit completes");
  }
  [STAThread] public static int Main(string[] args) {
   try {
@@ -55,6 +91,47 @@ static class Regression {
     Check(Bottom(panel)<30,"latest content expansion remains fully visible");
     chat.Height-=120; Pump();
     Check(Bottom(panel)<30,"window resize keeps latest message visible");
+    // Feed the product's native Enter handler while only fake HTTP handlers are installed.
+    var engine=Get(chat,"engine"); ((HttpClient)Get(engine,"http")).Dispose();
+    var handler=new FixtureHandler(); Set(engine,"http",new HttpClient(handler)); Set(engine,"address","https://fixture.invalid/v1"); Set(engine,"token","fixture");
+    Set(chat,"account","personal"); Set(chat,"connected",true);
+    var translator=Get(chat,"translator"); ((HttpClient)Get(translator,"http")).Dispose();
+    Set(translator,"http",new HttpClient(handler,false));
+    var serializer=new JavaScriptSerializer();
+    var cases=serializer.DeserializeObject(File.ReadAllText(args[0])) as object[];
+    foreach(var entry in cases) {
+     var item=(Dictionary<string,object>)entry; var text=(string)item["text"]; var target=(string)item["target"]; var translate=(bool)item["translate"];
+     Check(OutgoingLanguage.RequiresTranslation(text,target)==translate,"language policy: "+target+" / "+text.Replace("\n"," · "));
+     if(translate) continue;
+     Set(chat,"outgoing",target=="en" ? 1 : target=="ko" ? 0 : 2);
+     input.Text=text;
+     int count=handler.Sends;
+     PressEnter(input,chat);
+     Check(handler.Sends==count+1 && handler.LastText==text && input.Text=="" && Get(chat,"prepared")==null,"one Enter sends original without preview or API key");
+    }
+    Check(handler.Translations==0,"same-language messages make no translation API requests");
+    Set(chat,"outgoing",1);
+    Set(translator,"<Key>k__BackingField","fixture:fx");
+    input.Text="청구서를 보내주세요.";
+    int before=handler.Sends;
+    PressEnter(input,chat);
+    Check(handler.Sends==before && handler.Translations==1 && preview.Text=="Fixture translated invoice.","different language keeps two-step preview");
+    preview.Text="Edited fixture translation.";
+    PressEnter(input,chat);
+    Check(handler.Sends==before+1 && handler.LastText=="Edited fixture translation.","edited translation is sent on next Enter");
+    input.Text="Invoice";
+    var manual=(Task)chat.GetType().GetMethod("Submit",Private).Invoke(chat,new object[]{true});
+    while(!manual.IsCompleted) Pump(); manual.GetAwaiter().GetResult();
+    Check(handler.Sends==before+1 && Get(chat,"prepared")!=null,"manual translation button does not unexpectedly send same-language draft");
+    preview.Text="Manually edited English preview.";
+    PressEnter(input,chat);
+    Check(handler.LastText=="Manually edited English preview.","same-language preview edits are respected");
+    input.Text="OK"; handler.RejectSends=true;
+    PressEnter(input,chat);
+    Check(input.Text=="OK","failed direct send keeps original draft");
+    handler.RejectSends=false;
+    PressEnter(input,chat);
+    Check(input.Text=="" && handler.LastText=="OK","direct send can be retried");
     chat.Close();
    }
    return 0;

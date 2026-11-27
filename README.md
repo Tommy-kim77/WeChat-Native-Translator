@@ -1,10 +1,12 @@
 # WeChat Native Translator
 
-## Windows v0.1.36 다운로드
+## Windows v0.1.37 다운로드
 
-**[Windows v0.1.36 실행 파일 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/raw/refs/heads/codex/windows/v0.1.36/windows/Releases/v0.1.36/WeChat-Native-Translator-Windows-v0.1.36-x64.exe)**
+**[Windows v0.1.37 실행 파일 다운로드](https://github.com/Tommy-kim77/WeChat-Native-Translator/raw/refs/heads/codex/windows/v0.1.37/windows/Releases/v0.1.37/WeChat-Native-Translator-Windows-v0.1.37-x64.exe)**
 
-Windows 10/11 64비트용입니다. 실행 파일을 열고 휴대폰 WeChat으로 QR 로그인을 승인하세요. 번역에는 본인의 DeepL API 키가 필요합니다.
+Windows 10/11 64비트용입니다. 실행 파일을 열고 휴대폰 WeChat으로 QR 로그인을 승인하세요. 다른 언어로 번역할 때는 본인의 DeepL API 키가 필요합니다. 입력 언어와 전송 언어가 같으면 키 없이 Enter 한 번으로 원문을 전송합니다.
+
+v0.1.37은 한국어·중국어·영어 입력이 전송 언어와 같으면 번역 미리보기 없이 Enter 한 번으로 전송합니다. `OK`, `Hi`, `Invoice` 같은 짧은 영어도 그대로 보냅니다. 번역 아이콘으로 수동 미리보기를 만들고 편집하는 동작과 전송 실패 시 초안 보존은 유지됩니다.
 
 v0.1.36은 QR 승인 후 계정 확인이 실패해도 재로그인할 수 있으며, 이전 대화를 읽을 때 새 메시지와 번역 갱신에도 화면 위치를 유지합니다. v0.1.35의 화면 언어 변경 시 작성 중인 메시지와 전송 재시도 상태 보존, 동기화 실패 안내, 이전 메시지 추가 로딩, DeepL 키 파일 오류 처리가 추가됐습니다. 기존 연결 해제 감지, QR 재로그인 안내, 전송 실패 시 원문과 번역문 유지가 추가됐습니다. 대화 목록 갱신, 송신 메시지 번역 표시, 입력창 자동 확장, 입력창 아래 번역 미리보기, 검색 기능 수정이 포함됩니다. 휴대폰 메시지 동기화는 실제 계정 검증이 남아 있습니다.
 
@@ -15,7 +17,7 @@ An independent macOS client for WeChat with built-in translation. It connects th
 - Automatically translate Korean, English and Simplified Chinese messages, including quoted replies, into the selected incoming language.
 - Use the macOS preferred language for the app interface and the initial incoming translation. Open Language settings to choose the interface language, incoming translation and outgoing translation separately. The app remembers each selection.
 - Apple Translation is the default and needs no API key. To use DeepL, choose it in Language settings and verify your own [DeepL API key](https://developers.deepl.com/docs/getting-started/auth). The app stores the key in macOS Keychain. DeepL receives the text it translates, and those requests count toward your DeepL API usage.
-- Press Enter to preview an outgoing translation, then Enter again to send it. Use Shift+Enter for a new line.
+- When input matches the outgoing language (Korean, Chinese or English), one Enter sends the original without a translation request. Other languages show an editable translation preview first. Use Shift+Enter for a new line.
 - Browse chats with their original names, contact photos and group avatars. Recently loaded conversations appear while the app refreshes their history.
 - In group chats, incoming messages show the sender's WeChat display name and profile photo when available. Search any conversation's locally synced message history using the magnifying glass.
 - Use the message's `…` menu to copy the original text, quote a message, hide a message in this app, or ask WeChat to recall a message you sent. WeChat determines recall eligibility.
